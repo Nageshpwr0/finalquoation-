@@ -1,0 +1,28 @@
+/* Styles for CustomCalculator component */
+/* --- Modern Toggle Button Styles --- */
+.toggle-btn-modern {
+  background-color: #FFFFFF; /* White background */
+  color: #4B5563; /* Gray text */
+  border: 1px solid #D1D5DB; /* Light gray border */
+  padding: 8px 20px;
+  border-radius: 6px; /* Slightly rounded corners */
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap; /* Prevents text wrapping */
+}
+
+.toggle-btn-modern:hover {
+  border-color: #DB7093; /* Pink border on hover */
+  color: #DB7093; /* Pink text on hover */
+  transform: translateY(-1px); /* Slight lift effect */
+}
+
+.toggle-btn-modern.active {
+  background-color: #DB7093; /* Solid pink background when active */
+  color: #FFFFFF; /* White text when active */
+  border-color: #DB7093; /* Pink border when active */
+  box-shadow: 0 2px 4px rgba(219, 112, 147, 0.2);
+}

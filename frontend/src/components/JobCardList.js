@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { generatePdf } from './JobCardPDF';
 import '../design-system.css';
 
-function JobCardList({ apiUrl, refreshTrigger, onEdit }) {
+function JobCardList({ apiUrl, refreshTrigger, onEdit, laminationTypes }) {
   const [jobCards, setJobCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,7 +15,7 @@ function JobCardList({ apiUrl, refreshTrigger, onEdit }) {
 
   const fetchJobCards = async () => {
     try {
-      const response = await fetch(`${apiUrl}/api/jobcards`);
+      const response = await fetch('/api/jobcards');
       const data = await response.json();
       if (data && data.data) {
         setJobCards(data.data);
@@ -30,7 +30,24 @@ function JobCardList({ apiUrl, refreshTrigger, onEdit }) {
   };
 
   const handlePrint = (jobCard) => {
-    generatePdf(jobCard);
+    console.log('handlePrint called with jobCard:', jobCard);
+    let quotationDetails = null;
+
+    // The quotationDetails from the database is a JSON string.
+    // We need to parse it to be used in the PDF generation.
+    if (jobCard.quotationDetails && typeof jobCard.quotationDetails === 'string') {
+      try {
+        quotationDetails = JSON.parse(jobCard.quotationDetails);
+        console.log('Parsed quotation details from job card:', quotationDetails);
+      } catch (error) {
+        console.error('Error parsing quotationDetails JSON:', error);
+      }
+    } else if (jobCard.quotationDetails) {
+      // If it's already an object, use it directly.
+      quotationDetails = jobCard.quotationDetails;
+    }
+
+    generatePdf({ ...jobCard, quotationDetails }, laminationTypes);
   };
 
   const filteredJobCards = jobCards.filter(jobCard => {
@@ -65,8 +82,6 @@ function JobCardList({ apiUrl, refreshTrigger, onEdit }) {
 
   return (
     <div className="dashboard-view">
-      <h2 className="form-title-pink" style={{ textAlign: 'center', marginBottom: '20px' }}>Job Cards</h2>
-      
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '30px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <input
@@ -108,7 +123,7 @@ function JobCardList({ apiUrl, refreshTrigger, onEdit }) {
               <th>Customer</th>
               <th>Job Name</th>
               <th>Product</th>
-              <th style={{ width: '120px' }}>Image</th>
+              <th style={{ width: '80px' }}>Image</th>
               <th>Machine</th>
               <th>Quotation #</th>
               <th>Priority</th>
@@ -134,15 +149,15 @@ function JobCardList({ apiUrl, refreshTrigger, onEdit }) {
                     <td>{jobCard.customerName}</td>
                     <td>{jobCard.jobName}</td>
                     <td>{jobCard.productName}</td>
-                    <td style={{ position: 'relative', width: '120px' }}>
+                    <td style={{ position: 'relative', width: '80px' }}>
                       {jobCard.imageData ? (
                         <div style={{ position: 'relative', display: 'inline-block' }}>
                           <img 
                             src={jobCard.imageData} 
                             alt={jobCard.imageAttached || 'Job image'}
                             style={{ 
-                              width: '120px', 
-                              height: '80px', 
+                              width: '80px', 
+                              height: '60px', 
                               objectFit: 'cover', 
                               borderRadius: '4px',
                               cursor: 'pointer',

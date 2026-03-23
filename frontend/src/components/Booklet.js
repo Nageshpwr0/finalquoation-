@@ -24,6 +24,72 @@ const getWastage = (qty) => {
     if (qty <= 1500) return 100; if (qty <= 2500) return 150; if (qty <= 5000) return 200;
     if (qty <= 9000) return 250; if (qty <= 15000) return 350; return 500;
 };
+
+const groupFormDetails = (formDetails, qty, wastage) => {
+    if (!Array.isArray(formDetails)) {
+        return [];
+    }
+    const grouped = formDetails.reduce((acc, form) => {
+        const formType = form.type === 'Full' ? 'FrontBack' : 'Selfback';
+        const sheetValue = Math.ceil(qty * form.multiplier);
+        const key = `${formType}-${sheetValue}`;
+        if (!acc[key]) {
+            acc[key] = {
+                formType: formType,
+                multiplier: 0,
+                sheet: sheetValue,
+                wastage: wastage,
+                total: Math.ceil(form.sheets)
+            };
+        }
+        acc[key].multiplier += 1;
+        return acc;
+    }, {});
+    return Object.values(grouped);
+};
+
+const calculateSheets = (qty, pages, ups) => {
+    const wastage = getWastage(qty);
+    const pps = pages / ups; // Pages per sheet
+    const integerPart = Math.floor(pps);
+    const decimal = pps - integerPart;
+    
+    let totalSheets = 0;
+    let formDetails = [];
+    
+    // Add full sheets (1.0 each)
+    for (let i = 0; i < integerPart; i++) {
+        const sheets = (qty * 1) + wastage;
+        formDetails.push({ type: 'Full', multiplier: 1, sheets });
+        totalSheets += sheets;
+    }
+    
+    // Process decimal part (0.75 = 0.5 + 0.25)
+    if (decimal >= 0.75) {
+        const halfSheets = (qty * 0.5) + wastage;
+        const quarterSheets = (qty * 0.25) + wastage;
+        formDetails.push({ type: 'Half', multiplier: 0.5, sheets: halfSheets });
+        formDetails.push({ type: 'Quarter', multiplier: 0.25, sheets: quarterSheets });
+        totalSheets += halfSheets + quarterSheets;
+    } 
+    else if (decimal >= 0.5) {
+        const halfSheets = (qty * 0.5) + wastage;
+        formDetails.push({ type: 'Half', multiplier: 0.5, sheets: halfSheets });
+        totalSheets += halfSheets;
+    }
+    else if (decimal >= 0.25) {
+        const quarterSheets = (qty * 0.25) + wastage;
+        formDetails.push({ type: 'Quarter', multiplier: 0.25, sheets: quarterSheets });
+        totalSheets += quarterSheets;
+    }
+    
+    return {
+        totalSheets: Math.ceil(totalSheets),
+        formDetails,
+        wastage,
+        pagesPerSheet: pps
+    };
+};
 const getCoverWastage = (qty) => {
     const halfQty = qty / 2;
     if (halfQty <= 2100) return 100; if (halfQty <= 4000) return 150; if (halfQty <= 5000) return 200;
@@ -48,7 +114,13 @@ const getPrintingDisplayName = (printingType) => {
         'multi': 'Multi-Color',
         'single': 'Single Color',
         '2+2': '2+2 Color',
-        'none': 'None'
+        'none': 'None',
+        'common-ruled-4+4': 'Common/Ruled 4+4',
+        'common-ruled-2+2': 'Common/Ruled 2+2',
+        'common-ruled-1+1': 'Common/Ruled 1+1',
+        'common-ruled-4+0': 'Common/Ruled 4+0',
+        'common-ruled-2+0': 'Common/Ruled 2+0',
+        'common-ruled-1+0': 'Common/Ruled 1+0'
     };
     return printingMap[printingType] || capitalizeFirstLetter(printingType);
 };
@@ -74,7 +146,7 @@ const getFitSheetSize = (paperSize, printingType) => {
         case '9x9':
             return '20x28 or 20x30';
         case '12x12':
-            return '13x16';
+            return '13x26';
         default:
             return '20x30';
     }
@@ -92,7 +164,7 @@ const Modal = ({ show, onClose, children }) => {
     );
 };
 
-export default function Booklet({ formData, onSaved, getNextSerial, customers, paperTypes = [], onAddNewCustomer, apiUrl, onNavigate }) {
+export default function Booklet({ formData, onSaved, getNextSerial, customers, paperTypes = [], laminationTypes = [], onAddNewCustomer, apiUrl, onNavigate }) {
     const [inputs, setInputs] = useState({
         qty1: '', paperType: '', rate: '', paperSize: '', pages: '', gsm: '',
         printingType: 'multi', lamination: 'none', bindingType: 'center-pinning', coverGsm: '',
@@ -120,8 +192,18 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
     const [selectedQuotation, setSelectedQuotation] = useState(null);
     const [showFitDetails, setShowFitDetails] = useState(false);
     const [processDetails, setProcessDetails] = useState([]);
+    const [customerSearchTerm, setCustomerSearchTerm] = useState('');
 
     const isHardbound = useMemo(() => inputs.bindingType === 'hardbound-gally-section', [inputs.bindingType]);
+
+    const filteredCustomers = useMemo(() => {
+        if (!customerSearchTerm) {
+            return customers;
+        }
+        return customers.filter(customer =>
+            customer.customerName.toLowerCase().includes(customerSearchTerm.toLowerCase())
+        );
+    }, [customers, customerSearchTerm]);
 
     useEffect(() => {
         if (formData) {
@@ -269,16 +351,13 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
 
      const calculateSingleQuantity = (currentInputs, paperData) => {
         const { qty, pages, gsm, rate, size, printing, pressType, repetJob } = currentInputs;
-        const wastage = getWastage(qty);
+        const { totalSheets, formDetails, wastage } = calculateSheets(parseInt(qty), parseInt(pages), paperData.ups);
         const netSheets = (qty * pages) / paperData.ups;
-        const totalSheets = printing.startsWith("common-ruled") 
-            ? netSheets + wastage 
-            : ((qty + wastage) * pages) / paperData.ups;
         const paperCost = (paperData.weight * gsm) / 3100 * (rate / 500) * totalSheets;
         let pageUps = adjustFraction(pages / paperData.ups);
         let printingCost = 0;
         const isSmallSize = ["A4", "A5", "A6", "Letter", "Half-Letter"].includes(size);
-        const isSpecialSize = ["7.1x9.5", "7.1x4.75"].includes(size);
+        const isSpecialSize = ["7.1x9.5", "9.5x13.5", "7.1x4.75"].includes(size);
         if (pressType === 'pressA') {
             if (printing === "multi") {
                 const defaultCost = (qty < 1100 ? Math.max((paperData.makrdy - 150) * pageUps * 2, 1750) : (Math.ceil(qty / 1000) * paperData.imp + (paperData.makrdy - (paperData.imp + 150))) * pageUps * 2);
@@ -288,11 +367,21 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
             } else {
                 if (printing === "single") {
                     if (!(isSmallSize || isSpecialSize)) { setError("Single color is only allowed for select paper sizes."); return null; }
-                    const defaultCost = (qty < 1000 ? (600 * pageUps) * 2 : (isSpecialSize ? (Math.ceil(qty / 1000) * 150 + 400) * pageUps * 4 : (Math.ceil(qty / 1000) * 150 + 450) * pageUps * 2));
+                    let defaultCost = 0;
+                    if (isSpecialSize) {
+                        defaultCost = (Math.ceil(qty / 1000) * 150 + 450) * pageUps * 4;
+                    } else { // isSmallSize
+                        defaultCost = (Math.ceil(qty / 1000) * 150 + 450) * pageUps * 2;
+                    }
                     printingCost = repetJob ? defaultCost - 150 : defaultCost;
                 } else if (printing === "2+2") {
                     if (!(isSmallSize || isSpecialSize)) { setError("2+2 color is only allowed for select paper sizes."); return null; }
-                    const defaultCost = (qty < 1000 ? (800 * pageUps) * 2 : (isSpecialSize ? (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 4 : (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 2));
+                    let defaultCost = 0;
+                    if (isSpecialSize) {
+                        defaultCost = (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 4;
+                    } else { // isSmallSize
+                        defaultCost = (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 2;
+                    }
                     printingCost = repetJob ? defaultCost - 200 : defaultCost;
                 }
             }
@@ -316,11 +405,21 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                 printingCost = repetJob ? defaultCost - (700 * pageUps * 2) : defaultCost;
             } else if (printing === "single") {
                 if (!(isSmallSize || isSpecialSize)) { setError("Single color is only allowed for select paper sizes."); return null; }
-                const defaultCost = (qty < 1000 ? (600 * pageUps) * 2 : (isSpecialSize ? (Math.ceil(qty / 1000) * 150 + 400) * pageUps * 4 : (Math.ceil(qty / 1000) * 150 + 450) * pageUps * 2));
+                let defaultCost = 0;
+                if (isSpecialSize) {
+                    defaultCost = (Math.ceil(qty / 1000) * 150 + 450) * pageUps * 4;
+                } else { // isSmallSize
+                    defaultCost = (Math.ceil(qty / 1000) * 150 + 450) * pageUps * 2;
+                }
                 printingCost = repetJob ? defaultCost - (150 * pageUps * 2) : defaultCost;
             } else if (printing === "2+2") {
                 if (!(isSmallSize || isSpecialSize)) { setError("2+2 color is only allowed for select paper sizes."); return null; }
-                const defaultCost = (qty < 1000 ? 800 * pageUps * 2 : (isSpecialSize ? (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 4 : (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 2));
+                let defaultCost = 0;
+                if (isSpecialSize) {
+                    defaultCost = (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 4;
+                } else { // isSmallSize
+                    defaultCost = (Math.ceil(qty / 1000) * 200 + 600) * pageUps * 2;
+                }
                 printingCost = repetJob ? defaultCost - (200 * pageUps * 2) : defaultCost;
             } else if (printing.startsWith("common-ruled")) {
                  if (!(isSmallSize || isSpecialSize)) { setError(`Common ruled printing is not allowed for ${size}.`); return null; }
@@ -337,8 +436,26 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
         }
         let laminationCost = 0;
         if (currentInputs.lamination !== "none") {
-            const laminationRate = { "matt-all": 0.48, "gloss-all": 0.45, "varnish-all": 0.25 };
-            laminationCost = paperData.weight * laminationRate[currentInputs.lamination] * (qty + wastage) / 100 * (pageUps * 2 + 0.5);
+            // Find lamination rate from master data by ID
+            const selectedLamination = laminationTypes.find(lam => 
+                lam.id.toString() === currentInputs.lamination.toString()
+            );
+            const laminationRate = selectedLamination ? selectedLamination.rate : 0;
+            
+            // Debug logging
+            console.log('Inner Lamination Debug:', {
+                lamination: currentInputs.lamination,
+                selectedLamination,
+                laminationRate,
+                paperWeight: paperData.weight,
+                qty,
+                wastage
+            });
+            
+            // Formula: paper area * lamination rate * total sheets (from calculateSheets) / 100
+            laminationCost = paperData.weight * laminationRate * totalSheets / 100;
+            
+            console.log('Inner Lamination Cost:', laminationCost);
         }
         let coverPaperCost = 0, coverPrintingCost = 0, coverLaminationCost = 0;
         if (currentInputs.bindingType !== 'hardbound-gally-section' && !isNaN(currentInputs.coverGsm) && currentInputs.coverGsm > 0) {
@@ -360,8 +477,27 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                 coverPrintingCost = repetJob ? defaultCost - 700 : defaultCost;
             }
             if (currentInputs.coverLamination !== "none") {
-                const coverLaminationRates = { "matt": 0.45, "thermal": 0.85, "velvet": 3, "gloss": 0.42, "varnish": 0.25 };
-                coverLaminationCost = ((qty / (paperData.ups / 4)) + coverWastage) * paperData.weight * coverLaminationRates[currentInputs.coverLamination] / 100;
+                // Find cover lamination rate from master data by ID
+                const selectedCoverLamination = laminationTypes.find(lam => 
+                    lam.id.toString() === currentInputs.coverLamination.toString()
+                );
+                const coverLaminationRate = selectedCoverLamination ? selectedCoverLamination.rate : 0;
+                
+                // Debug logging
+                console.log('Cover Lamination Debug:', {
+                    coverLamination: currentInputs.coverLamination,
+                    selectedCoverLamination,
+                    coverLaminationRate,
+                    paperWeight: paperData.weight,
+                    qty,
+                    coverWastage
+                });
+                
+                // Formula: paper area * lamination rate * sheets used for cover / 100
+                const sheetsUsedForCover = (qty / (paperData.ups / 4)) + coverWastage;
+                coverLaminationCost = paperData.weight * coverLaminationRate * sheetsUsedForCover / 100;
+                
+                console.log('Cover Lamination Cost:', coverLaminationCost);
             }
         }
         let bindingCost = 0;
@@ -436,9 +572,17 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
             const baseCost = (paperData.weight * 0.75 * (qty + wastage) / 100) + 1000;
             dripupCost = Math.max(baseCost * (pageUps * 2) + bindingCost, 6000);
         }
-        const finalAmount = paperCost + printingCost + laminationCost + bindingCost + coverPaperCost + coverPrintingCost + coverLaminationCost + uvCost + foilingCost + dripupCost;
+        let finalAmount = paperCost + printingCost + laminationCost + bindingCost + coverPaperCost + coverPrintingCost + coverLaminationCost + uvCost + foilingCost + dripupCost;
+        
+        const selectedCustomer = customers.find(c => c.customerName === inputs.customerName);
+        const margin = selectedCustomer ? parseFloat(selectedCustomer.margin) : 0;
+
+        if (margin > 0) {
+            finalAmount *= (1 + margin / 100);
+        }
+
         const bookletRate = finalAmount / qty;
-        return { paperCost, coverPaperCost, printingCost, coverPrintingCost, laminationCost, coverLaminationCost, bindingCost, uvCost, foilingCost, dripupCost, finalAmount, bookletRate };
+        return { paperCost, coverPaperCost, printingCost, coverPrintingCost, laminationCost, coverLaminationCost, bindingCost, uvCost, foilingCost, dripupCost, finalAmount, bookletRate, formDetails, wastage };
     };
 
     const proceedWithCalculation = (fullSheetWeight = null) => {
@@ -485,7 +629,7 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
         const allResults = quantities.map(qty => {
             const currentRunInputs = { ...parsedInputs, qty };
             const result = calculateSingleQuantity(currentRunInputs, paperData);
-            return result ? { ...result, qty: qty, finalAmount: result.finalAmount, bookletRate: result.bookletRate, inputs: currentRunInputs } : null;
+            return result ? { ...result, qty: qty, finalAmount: result.finalAmount, bookletRate: result.bookletRate, inputs: { ...currentRunInputs, qty: qty } } : null;
         }).filter(Boolean);
 
         if (allResults.length > 0 && allResults.length === quantities.length) {
@@ -521,12 +665,28 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
         setSaveSuccess('');
         setError('');
     
+        // Ensure the results data structure is valid
+        const validResults = results.map(result => {
+          // Make sure formDetails is properly structured
+          const formDetails = Array.isArray(result.formDetails) ? result.formDetails : [];
+          
+          return {
+            ...result,
+            formDetails: formDetails,
+            // Ensure all required properties exist
+            qty: result.qty || 0,
+            finalAmount: result.finalAmount || 0,
+            bookletRate: result.bookletRate || 0,
+            inputs: result.inputs || {}
+          };
+        });
+    
         const quotationData = {
           productType: 'Booklet',
           serial: formData && formData.serial ? formData.serial : getNextSerial(),
           customerName: inputs.customerName,
           inputs: inputs,
-          results: results,
+          results: validResults,
           createdAt: formData && formData.createdAt ? formData.createdAt : new Date().toISOString(),
         };
     
@@ -607,9 +767,15 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                     repetJob: inputs.repetJob || false
                 }));
                 
-                // Auto-populate results if available
+                // Auto-populate results if available and enhance with calculated details
                 if (results && results.length > 0) {
-                    setResults(results);
+                    const enhancedResults = results.map(r => {
+                        const paper = paperOptions.find(p => p.value === r.inputs.size);
+                        if (!paper) return r;
+                        const { formDetails, wastage } = calculateSheets(r.qty, r.inputs.pages, paper.ups);
+                        return { ...r, formDetails, wastage };
+                    });
+                    setResults(enhancedResults);
                     setHasUnsavedChanges(true);
                 }
                 
@@ -627,60 +793,79 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
     const generateFitAndProcessDetails = (quotation) => {
         const inputs = quotation.inputs || {};
         const results = quotation.results || [];
-        
+    
         if (results.length === 0) return;
-        
-        const processDetailsArray = results.map((result, index) => {
+    
+        const processDetailsArray = results.flatMap((result, index) => {
             const selectedPaper = paperOptions.find(p => p.value === result.inputs?.size || inputs.paperSize);
-            const ups = selectedPaper?.ups || 1;
+            if (!selectedPaper) return [];
+    
+            const ups = selectedPaper.ups;
             const pages = parseInt(result.inputs?.pages || inputs.pages || 0);
             const qty = parseInt(result.inputs?.qty || inputs.qty1 || 0);
             const printingType = result.inputs?.printing || inputs.printingType || 'multi';
-            
-            // Calculate forms
-            const innerForms = pages / ups;
-            const wholeNumber = Math.floor(innerForms);
-            const fractional = innerForms - wholeNumber;
-            
-            let forms = 'frontback';
-            let sideCount = 2;
-            
-            // Determine form type based on printing type
-            if (printingType.includes('single') || printingType.includes('1+0') || printingType.includes('2+0') || printingType.includes('4+0')) {
-                forms = 'oneside';
-                sideCount = 1;
-            } else if (printingType.includes('1+1') || printingType.includes('2+2') || printingType.includes('4+4') || printingType === 'multi') {
-                forms = 'frontback';
-                sideCount = 2;
-            }
-            
-            // Calculate total sheets needed
-            const wastage = getWastage(qty);
-            const totalSheets = Math.ceil((qty + wastage) * pages / ups);
-            
-            return {
+    
+            const { formDetails, wastage: calculatedWastage } = calculateSheets(qty, pages, ups);
+    
+            const commonProps = {
                 optionNumber: index + 1,
-                forms: forms,
-                sideCount: sideCount,
-                qty: totalSheets,
-                extraSheets: wastage,
+                extraSheets: calculatedWastage,
                 paperSize: result.inputs?.size || inputs.paperSize || '',
                 fitSheetSize: getFitSheetSize(result.inputs?.size || inputs.paperSize || '', printingType),
                 ups: ups,
                 lamination: result.inputs?.lamination || inputs.lamination || 'none',
                 binding: result.inputs?.bindingType || inputs.bindingType || 'center-pinning',
                 printingType: printingType,
-                innerForms: innerForms,
-                wholeNumber: wholeNumber,
-                fractional: fractional,
+                innerForms: pages / ups,
+                wholeNumber: Math.floor(pages / ups),
+                fractional: (pages / ups) - Math.floor(pages / ups),
                 pages: pages,
                 originalQty: qty,
                 uvType: result.inputs?.uvType || inputs.uvType || 'none',
                 foilingType: result.inputs?.foilingType || inputs.foilingType || 'none',
-                dripUpType: result.inputs?.dripUpType || inputs.dripUpType || 'none'
+                dripUpType: result.inputs?.dripUpType || 'none',
+                pagesPerSheet: pages / ups
             };
+    
+            const groupedForms = groupFormDetails(formDetails, qty, calculatedWastage);
+    
+            const processes = groupedForms.map(form => {
+                let forms = 'selfback';
+                if (form.formType === 'FrontBack') {
+                    if (printingType.includes('single') || printingType.includes('1+0') || printingType.includes('2+0') || printingType.includes('4+0')) {
+                        forms = 'oneside';
+                    } else {
+                        forms = 'frontback';
+                    }
+                }
+    
+                return {
+                    ...commonProps,
+                    formDetails: [form],
+                    type: form.formType.toLowerCase(),
+                    forms: forms,
+                    sideCount: form.multiplier, // This is the fix
+                    qty: form.sheet,
+                };
+            });
+    
+            // Handle cover
+            if (result.inputs.coverGsm > 0) {
+                const coverWastage = getCoverWastage(qty);
+                const coverSheets = (qty * 4 / ups) + coverWastage;
+                processes.push({
+                    ...commonProps,
+                    type: 'cover',
+                    forms: 'selfback', // Cover is usually selfback
+                    sideCount: 1, // Cover is one form
+                    qty: Math.ceil(coverSheets),
+                    formDetails: [],
+                });
+            }
+    
+            return processes;
         });
-        
+    
         setProcessDetails(processDetailsArray);
     };
 
@@ -693,9 +878,16 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                         <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
                           <div style={{ flexGrow: 1 }}>
                             <label htmlFor="customerName" className="input-label">Customer Name</label>
+                            <input
+                                type="text"
+                                placeholder="Search Customer"
+                                className="input-box mb-2"
+                                value={customerSearchTerm}
+                                onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                            />
                             <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange}>
                               <option value="">-- Select Customer --</option>
-                              {customers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
+                              {filteredCustomers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
                             </select>
                           </div>
                           <button
@@ -778,9 +970,13 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                             <label htmlFor="lamination" className="input-label">Inner Lamination</label>
                             <select id="lamination" name="lamination" className="input-box" value={inputs.lamination} onChange={handleInputChange}>
                                 <option value="none">--No Lamination--</option>
-                                <option value="matt-all">Matt (All Pages)</option>
-                                <option value="gloss-all">Gloss (All Pages)</option>
-                                <option value="varnish-all">Varnish (All Pages)</option>
+                                {laminationTypes && laminationTypes
+                                  .filter(lamination => !lamination.laminationName.toLowerCase().includes('one side') && !lamination.laminationName.toLowerCase().includes('o/s'))
+                                  .map(lamination => (
+                                    <option key={lamination.id} value={lamination.id}>
+                                      {lamination.laminationName}
+                                    </option>
+                                  ))}
                             </select>
                         </div>
                         <div className="form-group">
@@ -828,12 +1024,12 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                                 <div className="form-group">
                                     <label htmlFor="coverLamination" className="input-label">Cover Lamination</label>
                                     <select id="coverLamination" name="coverLamination" className="input-box" value={inputs.coverLamination} onChange={handleInputChange}>
-                                        <option value="matt">Matt</option>
-                                        <option value="gloss">Gloss</option>
-                                        <option value="thermal">Thermal - ₹0.85</option>
-                                        <option value="velvet">Velvet - ₹3</option>
-                                        <option value="varnish">Varnish - ₹0.25</option>
                                         <option value="none">None</option>
+                                        {laminationTypes && laminationTypes.map(lamination => (
+                                          <option key={lamination.id} value={lamination.id}>
+                                            {lamination.laminationName} - ₹{lamination.rate}
+                                          </option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
@@ -942,7 +1138,12 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                             </tr>
                             <tr>
                                 <td>Inner Lami/Varnish</td>
-                                {results.map((r, i) => <td key={i}>{r.inputs.lamination === 'none' ? 'None' : capitalizeFirstLetter(r.inputs.lamination)}</td>)}
+                                {results.map((r, i) => {
+                                    if (r.inputs.lamination === 'none') return <td key={i}>None</td>;
+                                    const laminationType = laminationTypes.find(l => l.id.toString() === r.inputs.lamination.toString());
+                                    const laminationName = laminationType ? laminationType.laminationName : r.inputs.lamination;
+                                    return <td key={i}>{laminationName} (all page)</td>;
+                                })}
                             </tr>
                             <tr>
                                 <td>Binding</td>
@@ -960,7 +1161,11 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                                     </tr>
                                     <tr>
                                         <td>Cover Lamination</td>
-                                        {results.map((r, i) => <td key={i}>{r.inputs.coverGsm > 0 ? capitalizeFirstLetter(r.inputs.coverLamination) : '-'}</td>)}
+                                        {results.map((r, i) => {
+                                            if (r.inputs.coverLamination === 'none') return <td key={i}>None</td>;
+                                            const laminationType = laminationTypes.find(l => l.id.toString() === r.inputs.coverLamination.toString());
+                                            return <td key={i}>{laminationType ? laminationType.laminationName : r.inputs.coverLamination}</td>;
+                                        })}
                                     </tr>
                                 </>
                             )}
@@ -976,6 +1181,7 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                                     {results.map((r, i) => <td key={i}>{r.inputs.foilingType !== 'none' ? capitalizeFirstLetter(r.inputs.foilingType) : capitalizeFirstLetter(r.inputs.dripUpType)}</td>)}
                                 </tr>
                             )}
+
                             <tr>
                                 <td style={{ backgroundColor: '#FFF9FB', fontWeight: '600', color: '#DB7093' }}>Total Amt</td>
                                 {results.map((r, i) => <td key={i} style={{ backgroundColor: '#FFF9FB', fontWeight: '600', color: '#DB7093' }}>{formatCurrency(r.finalAmount)}</td>)}
@@ -1017,7 +1223,8 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                                         quotationNumber: inputs.quotationNumber,
                                         customerName: inputs.customerName,
                                         productName: 'Booklet',
-                                        processDetails: processDetails
+                                        processDetails: processDetails,
+                                        quotationDetails: selectedQuotation
                                     }));
                                     onNavigate('Job Card');
                                 }}
@@ -1137,10 +1344,83 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                                             <strong>Side Count:</strong> {process.sideCount}
                                         </div>
                                         <div>
-                                            <strong>Total Sheets:</strong> {process.qty}
+                                            <strong>Sheet:</strong> {process.qty}
                                         </div>
                                         <div>
                                             <strong>Wastage:</strong> {process.extraSheets}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Form Breakdown */}
+                                    <div style={{ margin: '1rem 0' }}>
+                                        <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Form Breakdown:</div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1rem', border: '1px solid #d1d5db' }}>
+                                            <thead>
+                                                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                                                    <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'left' }}>Forms</th>
+                                                    <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'center' }}>Multiplier</th>
+                                                    <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>Sheet</th>
+                                                    <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>Wastage</th>
+                                                    <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {groupFormDetails(process.formDetails, process.originalQty, process.extraSheets).map((form, i) => (
+                                                    <tr key={i}>
+                                                        <td style={{ padding: '0.5rem', border: '1px solid #d1d5db' }}>{form.formType}</td>
+                                                        <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'center' }}>{form.multiplier}</td>
+                                                        <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>{form.sheet}</td>
+                                                        <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>{form.wastage}</td>
+                                                        <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>
+                                                            {form.total * form.multiplier}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
+                                                    <td colSpan="4" style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>Total Sheets:</td>
+                                                    <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>
+                                                        {process.qty}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        <div style={{ fontSize: '0.9em', color: '#666', marginTop: '0.5rem' }}>
+                                            <strong>Pages per Sheet:</strong> {process.pagesPerSheet.toFixed(2)} (Pages: {process.pages} / UPS: {process.ups})
+                                        </div>
+                                        
+                                        {/* Paper Sheet Calculation */}
+                                        <div style={{ margin: '2rem 0', padding: '1.5rem', backgroundColor: '#f5f7fa', borderRadius: '6px', border: '1px solid #e1e4e8', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#2c3e50', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '2px solid #e1e4e8' }}>Paper Sheet Calculation</div>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db', fontSize: '0.95rem' }}>
+                                                <thead>
+                                                    <tr style={{ backgroundColor: '#e9ecef' }}>
+                                                        <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'left' }}>Form</th>
+                                                        <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'center' }}>Multiplier</th>
+                                                        <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'center' }}>Calculation</th>
+                                                        <th style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>Sheets</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {process.formDetails.map((form, i) => (
+                                                        <tr key={i}>
+                                                            <td style={{ padding: '0.5rem', border: '1px solid #d1d5db' }}>Form {i + 1} ({form.type})</td>
+                                                            <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'center' }}>{form.multiplier}</td>
+                                                            <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', fontSize: '0.9em', color: '#666' }}>
+                                                                ({process.originalQty} × {form.multiplier}) + {process.extraSheets}
+                                                            </td>
+                                                            <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>
+                                                                {Math.ceil(form.sheets)}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    <tr style={{ backgroundColor: '#f1f3f5', fontWeight: 'bold' }}>
+                                                        <td colSpan="3" style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>Total Sheets:</td>
+                                                        <td style={{ padding: '0.5rem', border: '1px solid #d1d5db', textAlign: 'right' }}>
+                                                            {process.qty}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
@@ -1193,22 +1473,11 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                     {results.map((r, optionIndex) => {
                         const selectedPaper = paperOptions.find(p => p.value === r.inputs.size);
                         const ups = selectedPaper?.ups || 1;
-                        const innerForms = r.inputs.pages / ups;
-                        const wholeNumber = Math.floor(innerForms);
-                        const fractional = innerForms - wholeNumber;
-                        const wastage = getWastage(r.inputs.qty);
-                        
-                        let selfBackCount = 0;
-                        if (fractional > 0) {
-                            if (fractional === 0.5 || fractional === 0.25) {
-                                selfBackCount = 1;
-                            } else if (fractional === 0.75) {
-                                selfBackCount = 2;
-                            } else {
-                                selfBackCount = Math.ceil(fractional / 0.25);
-                            }
-                        }
-                        
+                        const { formDetails, wastage } = r;
+
+                        // Ensure formDetails is an array
+                        const innerFormDetails = Array.isArray(formDetails) ? formDetails : [];
+
                         return (
                             <div key={optionIndex} style={{ marginBottom: '1.5rem' }}>
                                 <h5 className="text-md font-semibold mb-2 text-gray-700">Option {optionIndex + 1} - Fit Details (UPS: {ups}, Fit Sheet Size: {getFitSheetSize(r.inputs.size, r.inputs.printing)})</h5>
@@ -1216,67 +1485,36 @@ export default function Booklet({ formData, onSaved, getNextSerial, customers, p
                                     <thead>
                                         <tr>
                                             <th>Forms</th>
-                                            <th>Count</th>
+                                            <th>Multiplier</th>
                                             <th>Sheet</th>
                                             <th>Wastage</th>
                                             <th>Total</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {wholeNumber > 0 && (
-                                            <tr>
-                                                <td>Frontback</td>
-                                                <td>{wholeNumber}</td>
-                                                <td>{r.inputs.qty}</td>
-                                                <td>{wastage}</td>
-                                                <td>{(r.inputs.qty + wastage) * wholeNumber}</td>
+                                        {/* Inner Forms */}
+                                        {groupFormDetails(innerFormDetails, r.inputs.qty, wastage).map((form, i) => (
+                                            <tr key={`inner-${i}`}>
+                                                <td>{form.formType}</td>
+                                                <td>{form.multiplier}</td>
+                                                <td>{form.sheet}</td>
+                                                <td>{form.wastage}</td>
+                                                <td>{form.total * form.multiplier}</td>
                                             </tr>
-                                        )}
-                                        {selfBackCount > 0 && (
-                                            <tr>
-                                                <td>Selfback</td>
-                                                <td>{selfBackCount}</td>
-                                                <td>{Math.floor(r.inputs.qty * fractional)}</td>
-                                                <td>{wastage}</td>
-                                                <td>{(Math.floor(r.inputs.qty * fractional) + wastage) * selfBackCount}</td>
-                                            </tr>
-                                        )}
+                                        ))}
+                                        
+                                        {/* Cover Details */}
                                         {r.inputs.coverGsm > 0 && (() => {
-                                            const coverForms = 4 / ups;
-                                            const coverWhole = Math.floor(coverForms);
-                                            const coverFractional = coverForms - coverWhole;
                                             const coverWastage = getCoverWastage(r.inputs.qty);
-                                            let coverSelfBack = 0;
-                                            if (coverFractional > 0) {
-                                                if (coverFractional === 0.5 || coverFractional === 0.25) {
-                                                    coverSelfBack = 1;
-                                                } else if (coverFractional === 0.75) {
-                                                    coverSelfBack = 2;
-                                                } else {
-                                                    coverSelfBack = Math.ceil(coverFractional / 0.25);
-                                                }
-                                            }
+                                            const coverSheets = (r.inputs.qty * 4 / ups) + coverWastage;
                                             return (
-                                                <>
-                                                    {coverWhole > 0 && (
-                                                        <tr>
-                                                            <td>Cover Frontback</td>
-                                                            <td>{coverWhole}</td>
-                                                            <td>{r.inputs.qty}</td>
-                                                            <td>{coverWastage}</td>
-                                                            <td>{(r.inputs.qty + coverWastage) * coverWhole}</td>
-                                                        </tr>
-                                                    )}
-                                                    {coverSelfBack > 0 && (
-                                                        <tr>
-                                                            <td>Cover Selfback</td>
-                                                            <td>{coverSelfBack}</td>
-                                                            <td>{Math.floor(r.inputs.qty * coverFractional)}</td>
-                                                            <td>{coverWastage}</td>
-                                                            <td>{(Math.floor(r.inputs.qty * coverFractional) + coverWastage) * coverSelfBack}</td>
-                                                        </tr>
-                                                    )}
-                                                </>
+                                                <tr key="cover">
+                                                    <td>Cover-{ups === 4 ? 'Frontback' : 'Selfback'}</td>
+                                                    <td>-</td>
+                                                    <td>{Math.ceil(r.inputs.qty * 4 / ups)}</td>
+                                                    <td>{coverWastage}</td>
+                                                    <td>{Math.ceil(coverSheets)}</td>
+                                                </tr>
                                             );
                                         })()}
                                     </tbody>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import '../design-system.css';
 
 const Modal = ({ show, onClose, children }) => {
@@ -18,7 +18,7 @@ const capitalizeFirstLetter = (string) => {
     return string.charAt(0).toUpperCase() + string.slice(1);
 };
 
-const Calendar = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
+const Calendar = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], laminationTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
   // State for all form inputs
   const [inputs, setInputs] = useState({
     calendarType: 'patti',
@@ -67,8 +67,18 @@ const Calendar = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
   const [showAdditionalProcess2Inputs, setShowAdditionalProcess2Inputs] = useState(false);
   const [adjustmentPercentage, setAdjustmentPercentage] = useState(0);
   const [adjustmentAmount, setAdjustmentAmount] = useState(0);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
 
   const summaryRef = useRef(null);
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearchTerm) {
+        return customers;
+    }
+    return customers.filter(customer =>
+        customer.customerName.toLowerCase().includes(customerSearchTerm.toLowerCase())
+    );
+  }, [customers, customerSearchTerm]);
 
   useEffect(() => {
     if (formData) {
@@ -643,7 +653,15 @@ const Calendar = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
     }
     const postPressCosts = getPostPressCosts(baseCost);
     postPressCosts.calendarFinishingCost = calendarFinishingCost;
-    const totalCost = baseCost.totalPaperCost + baseCost.totalPrintingCost + baseCost.totalDripupCost + postPressCosts.lamCost + postPressCosts.dieType + postPressCosts.punchCost + postPressCosts.fabricationCost + postPressCosts.fabricationCostN + postPressCosts.additionalProcessCost + postPressCosts.additionalProcessCost2 + postPressCosts.halfcuttingAmt + calendarFinishingCost;
+    let totalCost = baseCost.totalPaperCost + baseCost.totalPrintingCost + baseCost.totalDripupCost + postPressCosts.lamCost + postPressCosts.dieType + postPressCosts.punchCost + postPressCosts.fabricationCost + postPressCosts.fabricationCostN + postPressCosts.additionalProcessCost + postPressCosts.additionalProcessCost2 + postPressCosts.halfcuttingAmt + calendarFinishingCost;
+    
+    const selectedCustomer = customers.find(c => c.customerName === inputs.customerName);
+    const margin = selectedCustomer ? parseFloat(selectedCustomer.margin) : 0;
+
+    if (margin > 0) {
+        totalCost *= (1 + margin / 100);
+    }
+
     const finalRate = qty > 0 ? totalCost / qty : 0;
     const newResult = { 
         qty,
@@ -767,10 +785,17 @@ const Calendar = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
           <div className="form-grid-modern">
             <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
               <div style={{ flexGrow: 1 }}>
-                <label className="input-label" htmlFor="customerName">Customer Name</label>
-                <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange} required>
+                <label htmlFor="customerName" className="input-label">Customer Name</label>
+                <input
+                    type="text"
+                    placeholder="Search Customer"
+                    className="input-box mb-2"
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                />
+                <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange}>
                   <option value="">-- Select Customer --</option>
-                  {customers.map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
+                  {filteredCustomers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
                 </select>
               </div>
               <button
@@ -859,16 +884,11 @@ const Calendar = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
               <label className="input-label" htmlFor="lamination">Lamination / Varnish</label>
               <select id="lamination" name="lamination" className="input-box" value={inputs.lamination} onChange={handleInputChange}>
                       <option value="none">None</option>
-                      <option value="mattbs">Matt Lamination B/S</option>
-                      <option value="glossbs">Gloss Lamination B/S</option>
-                      <option value="mattos" disabled={inputs.paperType === 'hotmailsticker'}>Matt Lamination O/S</option>
-                      <option value="glossos" disabled={inputs.paperType === 'hotmailsticker'}>Gloss Lamination O/S</option>
-                      <option value="varnishbs">Varnish B/S</option>
-                      <option value="varnishos" disabled={inputs.paperType === 'hotmailsticker'}>Varnish O/S</option>
-                      <option value="thermattbs">Thermal Lamination B/S</option>
-                      <option value="thermattos" disabled={inputs.paperType === 'hotmailsticker'}>Thermal Lamination O/S</option>
-                      <option value="velmattbs">Velvet Matt Lamination B/S</option>
-                      <option value="velmattos" disabled={inputs.paperType === 'hotmailsticker'}>Velvet Matt Lamination O/S</option>
+                      {laminationTypes && laminationTypes.map(lamination => (
+                        <option key={lamination.id} value={lamination.id}>
+                          {lamination.laminationName}
+                        </option>
+                      ))}
                     </select>
                 </div>
 

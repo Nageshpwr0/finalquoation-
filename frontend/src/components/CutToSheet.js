@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import '../design-system.css';
 
 // --- Reusable Components ---
@@ -51,11 +51,12 @@ const additionalProcessMap = {
     'spotuvbs': 'Spot UV BS',
     'raiseduvbs': 'Raised UV BS',
     'stampfoilbs': 'Stamp Foiling BS',
-    'magicfoilbs': 'Magic Foil BS'
+    'magicfoilbs': 'Magic Foil BS',
+    'dripup_both_sides': 'Driup Both Side'
 };
 
 
-function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddNewCustomer, getNextSerial, apiUrl, onNavigate }) {
+function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], laminationTypes = [], onAddNewCustomer, getNextSerial, apiUrl, onNavigate }) {
 
     const [inputs, setInputs] = useState({
         customerName: '',
@@ -85,10 +86,15 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
         additionalProcess2: '0',
         additionalProcess2Width: '',
         additionalProcess2Height: '',
+        posterGumming: false,
+        gummingWidth: '',
+        gummingHeight: '',
+        noOfStrips: '',
     });
 
     // State for UI toggles, results, and error handling
     const [showAdditionalProcesses, setShowAdditionalProcesses] = useState(false);
+    const [showPosterGummingInputs, setShowPosterGummingInputs] = useState(false);
     const [showAdditionalProcessInputs, setShowAdditionalProcessInputs] = useState(false);
     const [showAdditionalProcess2Inputs, setShowAdditionalProcess2Inputs] = useState(false);
     const [showHalfCutting, setShowHalfCutting] = useState(false);
@@ -102,6 +108,57 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [pendingNavigation, setPendingNavigation] = useState(null);
+    const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+
+    const filteredCustomers = useMemo(() => {
+        if (!customerSearchTerm) {
+            return customers;
+        }
+        return customers.filter(customer =>
+            customer.customerName.toLowerCase().includes(customerSearchTerm.toLowerCase())
+        );
+    }, [customers, customerSearchTerm]);
+
+    const resetForm = useCallback(() => {
+        setInputs({
+            customerName: '',
+            paperType: '78',
+            qty: 1000,
+            noOfLeaves: 1,
+            jobWidth: '',
+            jobHeight: '',
+            gsm: '',
+            rate: 78,
+            hcut: '',
+            wcut: '',
+            ups: '',
+            printingType: 'bothsides',
+            lamination: 'none',
+            checkA: false,
+            checkB: false,
+            checkC: false,
+            reelcut: false,
+            dieType: '0',
+            punching: 'none',
+            fabrication: '0',
+            fabricationN: '0',
+            additionalProcess: '0',
+            additionalProcessWidth: '',
+            additionalProcessHeight: '',
+            additionalProcess2: '0',
+            additionalProcess2Width: '',
+            additionalProcess2Height: '',
+            posterGumming: false,
+            gummingWidth: '',
+            gummingHeight: '',
+            noOfStrips: '',
+        });
+        setResult([]);
+        setBestFitDetails(null);
+        setError('');
+        setSaveSuccess('');
+        setHasUnsavedChanges(false);
+    }, []);
 
     // Effect to pre-fill form when editing
     useEffect(() => {
@@ -110,8 +167,10 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
             if (formData.results) {
                 setResult(formData.results);
             }
+        } else {
+            resetForm();
         }
-    }, [formData]);
+    }, [formData, resetForm]);
 
     // Refs for DOM elements
     const paperTypeRef = useRef(null);
@@ -177,6 +236,10 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
     useEffect(() => {
         setShowHalfCutting(inputs.fabricationN === 'halfcutting');
     }, [inputs.fabricationN]);
+
+    useEffect(() => {
+        setShowPosterGummingInputs(inputs.posterGumming);
+    }, [inputs.posterGumming]);
 
     useEffect(() => {
         if (inputs.paperType === 'hotmailsticker') {
@@ -335,7 +398,7 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
 
             const getRunCost = (formSize, printingMethod) => {
                 const sheetsNeeded = Math.ceil(currentQty * formSize);
-                if (sheetsNeeded === 0) return { paperCost: 0, printingCost: 0, dripupCost: 0, totalSheets: 0 };
+                if (sheetsNeeded === 0) return { paperCost: 0, printingCost: 0, dripupCost: 0, totalSheets: 0, wastage: 0, sheetsNeeded: 0 };
             
                 let wastage = 0;
                 if (sheetsNeeded <= 1500) wastage = 100; else if (sheetsNeeded <= 3000) wastage = 150; else if (sheetsNeeded <= 6000) wastage = 200;
@@ -431,12 +494,18 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                 }
             
                 let dripupCostForForm = 0;
-                if (inputs.additionalProcess === 'dripup' || inputs.additionalProcess2 === 'dripup') {
+                let dripupMultiplier = 0;
+                if (inputs.additionalProcess === 'dripup') dripupMultiplier += 1;
+                if (inputs.additionalProcess === 'dripup_both_sides') dripupMultiplier += 2;
+                if (inputs.additionalProcess2 === 'dripup') dripupMultiplier += 1;
+                if (inputs.additionalProcess2 === 'dripup_both_sides') dripupMultiplier += 2;
+
+                if (dripupMultiplier > 0) {
                     let dripupCost = (totalSheetsForForm <= 6000) ? (paperArea * 0.85 * totalSheetsForForm) / 100 + 600 : (paperArea * 0.75 * totalSheetsForForm) / 100 + 600;
-                    dripupCostForForm = Math.max(dripupCost, 6000);
+                    dripupCostForForm = Math.max(dripupCost, 600) * dripupMultiplier;
                 }
             
-                return { paperCost: paperCostForForm, printingCost: printingCostForForm, dripupCost: dripupCostForForm, totalSheets: totalSheetsForForm };
+                return { paperCost: paperCostForForm, printingCost: printingCostForForm, dripupCost: dripupCostForForm, totalSheets: totalSheetsForForm, wastage: wastage, sheetsNeeded: sheetsNeeded };
             };
             
             const runs = [];
@@ -513,7 +582,9 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                     sheets: res.totalSheets,
                     paperCost: res.paperCost,
                     printingCost: res.printingCost,
-                    dripupCost: res.dripupCost
+                    dripupCost: res.dripupCost,
+                    wastage: res.wastage,
+                    sheetsNeeded: res.sheetsNeeded
                 };
             }).filter(run => run.sheets > 0);
 
@@ -546,19 +617,32 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
         const currentNoOfLeaves = parseInt(inputs.noOfLeaves) || 1;
         
         let lamCost = 0;
-        if (baseCost.sheet) {
-            const lamArea = baseCost.sheet.width * baseCost.sheet.height;
-            switch (inputs.lamination) {
-                case "mattbs": lamCost = (lamArea * 0.90 * baseCost.grandTotalSheets) / 100; break;
-                case "glossbs": lamCost = (lamArea * 0.84 * baseCost.grandTotalSheets) / 100; break;
-                case "mattos": lamCost = (lamArea * 0.45 * baseCost.grandTotalSheets) / 100; break;
-                case "glossos": lamCost = (lamArea * 0.42 * baseCost.grandTotalSheets) / 100; break;
-                case "varnishbs": lamCost = (lamArea * 0.5 * baseCost.grandTotalSheets) / 100; break;
-                case "varnishos": lamCost = (lamArea * 0.25 * baseCost.grandTotalSheets) / 100; break;
-                case "thermattbs": lamCost = (lamArea * 1.80 * baseCost.grandTotalSheets) / 100; break;
-                case "thermattos": lamCost = (lamArea * 0.85 * baseCost.grandTotalSheets) / 100; break;
-                case "velmattbs": lamCost = (lamArea * 6 * baseCost.grandTotalSheets) / 100; break;
-                case "velmattos": lamCost = (lamArea * 3 * baseCost.grandTotalSheets) / 100; break;
+        if (baseCost.sheet && inputs.lamination !== 'none') {
+            // Find the lamination type from master data
+            const selectedLamination = laminationTypes.find(lam => lam.id === parseInt(inputs.lamination));
+            
+            if (selectedLamination) {
+                 // Use the formula: best fit area * (netsheet + wastagesheet) * lamination rate / 100
+                 const bestFitArea = baseCost.sheet.width * baseCost.sheet.height;
+                 const totalSheets = baseCost.grandTotalSheets || 0;
+                 const laminationRate = selectedLamination.rate || 0;
+                 
+                 lamCost = (bestFitArea * totalSheets * laminationRate) / 100;
+            } else {
+                // Fallback to hardcoded rates if lamination not found in master data
+                const lamArea = baseCost.sheet.width * baseCost.sheet.height;
+                switch (inputs.lamination) {
+                    case "mattbs": lamCost = (lamArea * 0.90 * baseCost.grandTotalSheets) / 100; break;
+                    case "glossbs": lamCost = (lamArea * 0.84 * baseCost.grandTotalSheets) / 100; break;
+                    case "mattos": lamCost = (lamArea * 0.45 * baseCost.grandTotalSheets) / 100; break;
+                    case "glossos": lamCost = (lamArea * 0.42 * baseCost.grandTotalSheets) / 100; break;
+                    case "varnishbs": lamCost = (lamArea * 0.5 * baseCost.grandTotalSheets) / 100; break;
+                    case "varnishos": lamCost = (lamArea * 0.25 * baseCost.grandTotalSheets) / 100; break;
+                    case "thermattbs": lamCost = (lamArea * 1.80 * baseCost.grandTotalSheets) / 100; break;
+                    case "thermattos": lamCost = (lamArea * 0.85 * baseCost.grandTotalSheets) / 100; break;
+                    case "velmattbs": lamCost = (lamArea * 6 * baseCost.grandTotalSheets) / 100; break;
+                    case "velmattos": lamCost = (lamArea * 3 * baseCost.grandTotalSheets) / 100; break;
+                }
             }
         }
 
@@ -624,7 +708,19 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
             if (halfcuttingAmt > 0 && halfcuttingAmt < 500) halfcuttingAmt = 500;
         }
 
-        return { lamCost, dieCost: parseFloat(inputs.dieType), punchCost, fabricationCost, fabricationCostN, additionalProcessCost, additionalProcessCost2, halfcuttingAmt };
+        let posterGummingCost = 0;
+        if (inputs.posterGumming) {
+            const gummingWidth = parseInputToInches(inputs.gummingWidth);
+            const gummingHeight = parseInputToInches(inputs.gummingHeight);
+            const noOfStrips = parseInt(inputs.noOfStrips) || 0;
+            if (gummingWidth > 0 && gummingHeight > 0 && noOfStrips > 0) {
+                const formula1 = gummingWidth * gummingHeight * noOfStrips * (1.5 / 100) * currentQty;
+                
+                posterGummingCost = Math.max(formula1);
+            }
+        }
+
+        return { lamCost, dieCost: parseFloat(inputs.dieType), punchCost, fabricationCost, fabricationCostN, additionalProcessCost, additionalProcessCost2, halfcuttingAmt, posterGummingCost };
     };
 
 
@@ -670,7 +766,9 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                return response.json().then(err => {
+                    throw new Error(err.error || 'Network response was not ok');
+                });
             }
             return response.json();
         })
@@ -681,11 +779,15 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
             if (onSaved) {
                 onSaved(savedQuotation);
             }
+            // Reset the form only if it's a new quotation, not an update
+            if (!formData || !formData.id) {
+                resetForm();
+            }
             setTimeout(() => setSaveSuccess(''), 3000);
         })
         .catch(error => {
             console.error('Error saving quotation:', error);
-            setError('Failed to save quotation. Please try again.');
+            setError(`Failed to save quotation: ${error.message}`);
             setIsSaving(false);
         });
     };
@@ -737,6 +839,11 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
             return;
         }
 
+        if (inputs.posterGumming && (!inputs.gummingWidth || !inputs.gummingHeight || !inputs.noOfStrips)) {
+            setError('Please provide Gumming Width, Gumming Height, and No. of Strips for Poster Gumming.');
+            return;
+        }
+
 
         setError('');
         const baseCost = getBasePrintCost();
@@ -752,7 +859,15 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
         setBestFitDetails({ sheet: baseCost.sheet, ups: baseCost.ups, grandTotalSheets: baseCost.grandTotalSheets, runDetails: baseCost.runDetails });
 
         const postPressCosts = getPostPressCosts(baseCost);
-        const totalCost = baseCost.totalPaperCost + baseCost.totalPrintingCost + baseCost.totalDripupCost + postPressCosts.lamCost + postPressCosts.dieCost + postPressCosts.punchCost + postPressCosts.fabricationCost + postPressCosts.fabricationCostN + postPressCosts.additionalProcessCost + postPressCosts.additionalProcessCost2 + postPressCosts.halfcuttingAmt;
+        let totalCost = baseCost.totalPaperCost + baseCost.totalPrintingCost + baseCost.totalDripupCost + postPressCosts.lamCost + postPressCosts.dieCost + postPressCosts.punchCost + postPressCosts.fabricationCost + postPressCosts.fabricationCostN + postPressCosts.additionalProcessCost + postPressCosts.additionalProcessCost2 + postPressCosts.halfcuttingAmt + postPressCosts.posterGummingCost;
+        
+        const selectedCustomer = customers.find(c => c.customerName === inputs.customerName);
+        const margin = selectedCustomer ? parseFloat(selectedCustomer.margin) : 0;
+
+        if (margin > 0) {
+            totalCost *= (1 + margin / 100);
+        }
+
         const currentNoOfLeaves = parseInt(inputs.noOfLeaves) || 1;
         const finalRate = currentQty > 0 ? totalCost / (currentQty * currentNoOfLeaves) : 0;
         
@@ -775,6 +890,10 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
             fabricationText: fabricationRef.current?.options[fabricationRef.current.selectedIndex]?.text || inputs.fabrication,
             fabricationN: inputs.fabricationN,
             fabricationNText: fabricationNRef.current?.options[fabricationNRef.current.selectedIndex]?.text || inputs.fabricationN,
+            posterGumming: inputs.posterGumming,
+            gummingWidth: inputs.gummingWidth,
+            gummingHeight: inputs.gummingHeight,
+            noOfStrips: inputs.noOfStrips,
             additionalProcess: inputs.additionalProcess,
             additionalProcess2: inputs.additionalProcess2,
             checkA: inputs.checkA,
@@ -785,7 +904,12 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
             finalRate,
             baseCost,
             postPressCosts,
-            bestFitDetails: { sheet: baseCost.sheet, ups: baseCost.ups, grandTotalSheets: baseCost.grandTotalSheets, runDetails: baseCost.runDetails }
+            bestFitDetails: { 
+                sheet: baseCost.sheet, 
+                ups: baseCost.ups, 
+                grandTotalSheets: baseCost.grandTotalSheets, 
+                runDetails: baseCost.runDetails 
+            }
         };
 
         setResult(prevResult => {
@@ -838,15 +962,28 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                 <form className="cut-to-sheet-form" onSubmit={e => e.preventDefault()}>
                     <div className="form-grid-modern">
                         <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-                            <div style={{ flexGrow: 1 }}>
-                                <label className="input-label" htmlFor="customerName">Customer Name</label>
-                                <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange}>
-                                    <option value="">-- Select Customer --</option>
-                                    {customers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
-                                </select>
-                            </div>
-                            <button type="button" className="save-btn-modern" style={{ padding: '10px 15px', fontSize: '1.2rem', lineHeight: 1 }} onClick={() => onNavigate('Customer Master')}>+
-                            </button>
+                          <div style={{ flexGrow: 1 }}>
+                            <label htmlFor="customerName" className="input-label">Customer Name</label>
+                            <input
+                                type="text"
+                                placeholder="Search Customer"
+                                className="input-box mb-2"
+                                value={customerSearchTerm}
+                                onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                            />
+                            <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange}>
+                              <option value="">-- Select Customer --</option>
+                              {filteredCustomers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
+                            </select>
+                          </div>
+                          <button
+                            type="button"
+                            className="save-btn-modern"
+                            style={{ padding: '10px 15px', fontSize: '1.2rem' }}
+                            onClick={() => onNavigate('Customer Master')}
+                          >
+                            +
+                          </button>
                         </div>
                         <FormSelect label="Paper Type" id="paperType" name="paperType" ref={paperTypeRef} value={inputs.paperType} onChange={(e) => {
                             const selectedPaperType = paperTypes.find(p => p.paperTypeName === e.target.value);
@@ -864,7 +1001,7 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                             {paperTypes.map(p => <option key={p.id} value={p.paperTypeName}>{p.paperTypeName}</option>)}
                         </FormSelect>
                         <FormInput label="Quantity" id="qty" name="qty" type="number" value={inputs.qty} onChange={handleInputChange} placeholder="e.g., 1000" required/>
-                        <FormInput label="No of Leaves/Design" id="noOfLeaves" name="noOfLeaves" type="number" value={inputs.noOfLeaves} onChange={handleInputChange} placeholder="e.g., 1"/>
+                        <FormInput label="No of Leaves/Design" id="noOfLeaves" name="noOfLeaves" type="number" value={inputs.noOfLeaves} onChange={handleInputChange} placeholder="e.g., 1" />
                         <FormInput label="Job Width (inch/mm)" id="jobWidth" name="jobWidth" type="text" value={inputs.jobWidth} onChange={handleInputChange} placeholder="e.g., 8.5 or 210mm" required/>
                         <FormInput label="Job Height (inch/mm)" id="jobHeight" name="jobHeight" type="text" value={inputs.jobHeight} onChange={handleInputChange} placeholder="e.g., 11 or 297mm" required/>
                         <FormInput label="GSM" id="gsm" name="gsm" type="number" value={inputs.gsm} onChange={(e) => {
@@ -913,39 +1050,36 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                         </FormSelect>
                         <FormSelect label="Lamination / Varnish" id="lamination" name="lamination" ref={laminationRef} value={inputs.lamination} onChange={handleInputChange}>
                             <option value="none">None</option>
-                            <option value="mattos">Matt Lamination O/S</option>
-                            <option value="glossos">Gloss Lamination O/S</option>
-                            <option value="varnishos">Varnish O/S</option>
-                            <option value="thermattos">Thermal Lamination O/S</option>
-                            <option value="velmattos">Velvet Matt Lamination O/S</option>
-                            {inputs.paperType !== 'hotmailsticker' && (
-                                <>
-                                    <option value="mattbs">Matt Lamination B/S</option>
-                                    <option value="glossbs">Gloss Lamination B/S</option>
-                                    <option value="varnishbs">Varnish B/S</option>
-                                    <option value="thermattbs">Thermal Lamination B/S</option>
-                                    <option value="velmattbs">Velvet Matt Lamination B/S</option>
-                                </>
-                            )}
+                            {laminationTypes && laminationTypes.map(lamination => (
+                              <option key={lamination.id} value={lamination.id}>
+                                {lamination.laminationName}
+                              </option>
+                            ))}
                         </FormSelect>
                     </div>
-                    <div className="flex justify-center my-4">
-                        <div className="flex flex-col items-center gap-4">
-                            <button 
-                                type="button" 
-                                onClick={() => setShowAdditionalProcesses(!showAdditionalProcesses)} 
-                                className="save-btn-modern text-sm py-1 px-4"
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Tab' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        calculateBtnRef.current.focus();
-                                    }
-                                }}
-                            >
-                                Additional Processes {showAdditionalProcesses ? '▲' : '▼'}
-                            </button>
-                        </div>
+                    <div className="flex justify-center items-center my-4 gap-4">
+                        <button 
+                            type="button" 
+                            onClick={() => setShowAdditionalProcesses(!showAdditionalProcesses)} 
+                            className="save-btn-modern text-sm py-1 px-4"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Tab' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    calculateBtnRef.current.focus();
+                                }
+                            }}
+                        >
+                            Additional Processes {showAdditionalProcesses ? '▲' : '▼'}
+                        </button>
+                        <Checkbox id="posterGumming" name="posterGumming" label="Poster Gumming Strip" checked={inputs.posterGumming} onChange={handleInputChange} />
                     </div>
+                    {showPosterGummingInputs && (
+                        <div className="form-grid-modern">
+                            <FormInput label="Gumming Width (inch)" id="gummingWidth" name="gummingWidth" type="text" value={inputs.gummingWidth} onChange={handleInputChange} required />
+                            <FormInput label="Gumming Height (inch)" id="gummingHeight" name="gummingHeight" type="text" value={inputs.gummingHeight} onChange={handleInputChange} required />
+                            <FormInput label="No. of Strips" id="noOfStrips" name="noOfStrips" type="number" value={inputs.noOfStrips} onChange={handleInputChange} required />
+                        </div>
+                    )}
                     {showAdditionalProcesses && (
                         <div className="form-grid-modern">
                             <FormSelect label="Die" id="dieType" name="dieType" ref={dieTypeRef} value={inputs.dieType} onChange={handleInputChange}>
@@ -998,6 +1132,7 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                             <FormSelect label="Additional Process 1" id="additionalProcess" name="additionalProcess" value={inputs.additionalProcess} onChange={handleInputChange}>
                                 <option value="0">None</option>
                                 <option value="dripup">Drip Up</option>
+                                <option value="dripup_both_sides">Driup Both Side</option>
                                 <option value="spotuv">Spot UV</option>
                                 <option value="raiseduv">Raised UV</option>
                                 <option value="stampfoil">Stamp Foiling</option>
@@ -1016,6 +1151,7 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                             <FormSelect label="Additional Process 2" id="additionalProcess2" name="additionalProcess2" value={inputs.additionalProcess2} onChange={handleInputChange}>
                                 <option value="0">None</option>
                                 <option value="dripup">Drip Up</option>
+                                <option value="dripup_both_sides">Driup Both Side</option>
                                 <option value="spotuv">Spot UV</option>
                                 <option value="raiseduv">Raised UV</option>
                                 <option value="stampfoil">Stamp Foiling</option>
@@ -1138,6 +1274,16 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                                         {result.map((r, i) => <td key={i}>{additionalProcessMap[r.additionalProcess2]}</td>)}
                                     </tr>
                                 )}
+                                {result.some(r => r.posterGumming) && (
+                                    <tr>
+                                        <td>Poster Gumming</td>
+                                        {result.map((r, i) => (
+                                            <td key={i}>
+                                                {r.posterGumming ? `${r.gummingWidth}x${r.gummingHeight}x${r.noOfStrips} strip` : '-'}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                )}
                                 <tr>
                                     <td style={{ backgroundColor: '#FFF9FB', fontWeight: '600', color: '#DB7093' }}>Total Amt</td>
                                     {result.map((r, i) => <td key={i} style={{ backgroundColor: '#FFF9FB', fontWeight: '600', color: '#DB7093' }}>₹{r.totalCost.toFixed(2)}</td>)}
@@ -1248,7 +1394,8 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                                 <tr>
                                     <th>Option</th>
                                     <th>Details</th>
-                                    <th>No of Sheets</th>
+                                    <th>Net Sheets</th>
+                                    <th>Wastage</th>
                                     <th>Paper Cost</th>
                                     <th>Printing Cost</th>
                                     <th>Total</th>
@@ -1257,60 +1404,76 @@ function CutToSheet({ onSaved, formData, customers = [], paperTypes = [], onAddN
                             <tbody>
                                 {result.map((r, i) => (
                                     <React.Fragment key={i}>
-                                        {r.bestFitDetails.runDetails.map((run, j) => (
+                                        {r.bestFitDetails.runDetails.map((run, j) => {
+                                            const wastageForRun = run.wastage || 0;
+                                            const netSheets = run.sheetsNeeded || 0;
+                                            return (
                                             <tr key={j} style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
                                                 <td>{j === 0 ? i + 1 : ''}</td>
                                                 <td>{run.method}</td>
-                                                <td>{run.sheets}</td>
+                                                <td>{netSheets}</td>
+                                                <td>{wastageForRun}</td>
                                                 <td>₹{run.paperCost.toFixed(2)}</td>
                                                 <td>₹{run.printingCost.toFixed(2)}</td>
                                                 <td>₹{(run.paperCost + run.printingCost).toFixed(2)}</td>
                                             </tr>
-                                        ))}
+                                        )})}
                                         {r.postPressCosts.lamCost > 0 && (
                                             <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
-                                                <td colSpan="5" className="text-right">Lamination Cost</td>
+                                                <td colSpan="6" className="text-right">{capitalizeFirstLetter(r.laminationText || r.lamination)}</td>
                                                 <td>₹{r.postPressCosts.lamCost.toFixed(2)}</td>
+                                            </tr>
+                                        )}
+                                        {r.baseCost.totalDripupCost > 0 && (
+                                            <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
+                                                <td colSpan="6" className="text-right">Drip Up Cost</td>
+                                                <td>₹{r.baseCost.totalDripupCost.toFixed(2)}</td>
                                             </tr>
                                         )}
                                         {r.postPressCosts.additionalProcessCost > 0 && (
                                             <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
-                                                <td colSpan="5" className="text-right">Additional Process 1 Cost</td>
+                                                <td colSpan="6" className="text-right">Additional Process 1 Cost</td>
                                                 <td>₹{r.postPressCosts.additionalProcessCost.toFixed(2)}</td>
                                             </tr>
                                         )}
                                         {r.postPressCosts.additionalProcessCost2 > 0 && (
                                             <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
-                                                <td colSpan="5" className="text-right">Additional Process 2 Cost</td>
+                                                <td colSpan="6" className="text-right">Additional Process 2 Cost</td>
                                                 <td>₹{r.postPressCosts.additionalProcessCost2.toFixed(2)}</td>
                                             </tr>
                                         )}
                                         {r.postPressCosts.dieCost > 0 && (
                                             <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
-                                                <td colSpan="5" className="text-right">Die Cost</td>
+                                                <td colSpan="6" className="text-right">Die Cost</td>
                                                 <td>₹{r.postPressCosts.dieCost.toFixed(2)}</td>
                                             </tr>
                                         )}
                                         {r.postPressCosts.punchCost > 0 && (
                                             <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
-                                                <td colSpan="5" className="text-right">Punching Cost</td>
+                                                <td colSpan="6" className="text-right">Punching Cost</td>
                                                 <td>₹{r.postPressCosts.punchCost.toFixed(2)}</td>
                                             </tr>
                                         )}
                                         {r.postPressCosts.fabricationCost > 0 && (
                                             <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
-                                                <td colSpan="5" className="text-right">Fabrication Cost</td>
+                                                <td colSpan="6" className="text-right">Fabrication Cost</td>
                                                 <td>₹{r.postPressCosts.fabricationCost.toFixed(2)}</td>
                                             </tr>
                                         )}
                                         {r.postPressCosts.fabricationCostN > 0 && (
                                             <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
-                                                <td colSpan="5" className="text-right">Fabrication 2 Cost</td>
+                                                <td colSpan="6" className="text-right">Fabrication 2 Cost</td>
                                                 <td>₹{r.postPressCosts.fabricationCostN.toFixed(2)}</td>
                                             </tr>
                                         )}
+                                        {r.postPressCosts.posterGummingCost > 0 && (
+                                            <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 95%)` }}>
+                                                <td colSpan="6" className="text-right">Poster Gumming Cost</td>
+                                                <td>₹{r.postPressCosts.posterGummingCost.toFixed(2)}</td>
+                                            </tr>
+                                        )}
                                         <tr style={{ backgroundColor: `hsl(${i * 60}, 70%, 85%)` }}>
-                                            <td colSpan="3" className="font-bold text-right">Option {i + 1} Total</td>
+                                            <td colSpan="4" className="font-bold text-right">Option {i + 1} Total</td>
                                             <td className="font-bold">₹{r.baseCost.totalPaperCost.toFixed(2)}</td>
                                             <td className="font-bold">₹{r.baseCost.totalPrintingCost.toFixed(2)}</td>
                                             <td className="font-bold">₹{r.totalCost.toFixed(2)}</td>

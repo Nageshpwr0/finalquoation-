@@ -1,14 +1,33 @@
 import React, { useState } from 'react';
 import '../design-system.css';
 
-function Dashboard({ quotations, onEdit }) {
+function Dashboard({ quotations, onEdit, onRefresh }) {
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const [cancelledQuotations, setCancelledQuotations] = useState(new Set());
   const pageSize = 10;
 
-  const handleCancel = (quotationId) => {
-    setCancelledQuotations(prev => new Set([...prev, quotationId]));
+  const handleCancel = async (quotationId) => {
+    try {
+      const response = await fetch(`/api/quotations/${quotationId}/cancel`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        // Refresh the quotations list
+        if (onRefresh) {
+          onRefresh();
+        }
+      } else {
+        console.error('Failed to cancel quotation');
+        alert('Failed to cancel quotation. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error cancelling quotation:', error);
+      alert('Error cancelling quotation. Please try again.');
+    }
   };
 
   const getDescription = (q) => {
@@ -125,11 +144,7 @@ function Dashboard({ quotations, onEdit }) {
     return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
   };
 
-  const filteredQuotations = quotations.filter((q, index) => {
-    const uniqueId = `${q.serial}-${index}`;
-    // Exclude cancelled quotations from search
-    if (cancelledQuotations.has(uniqueId)) return false;
-    
+  const filteredQuotations = quotations.filter((q) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -140,20 +155,7 @@ function Dashboard({ quotations, onEdit }) {
     );
   });
 
-  // Show all quotations (including cancelled) for display
-  const displayQuotations = quotations.filter((q, index) => {
-    const uniqueId = `${q.serial}-${index}`;
-    if (!searchTerm) return true;
-    if (cancelledQuotations.has(uniqueId)) return true; // Show cancelled in grey
-    
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      (q.customerName || q.inputs?.customerName || '').toLowerCase().includes(searchLower) ||
-      (q.productType || '').toLowerCase().includes(searchLower) ||
-      getDescription(q).toLowerCase().includes(searchLower) ||
-      (q.serial || '').toString().includes(searchLower)
-    );
-  });
+  const displayQuotations = filteredQuotations;
 
   return (
     <div className="dashboard-view">
@@ -202,26 +204,28 @@ function Dashboard({ quotations, onEdit }) {
               <th>Total Amt</th>
               <th>Rate</th>
               <th>Date</th>
+              <th>Status</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {displayQuotations.length === 0 ? (
-              <tr><td colSpan="9" style={{ textAlign: 'center' }}>
+              <tr><td colSpan="10" style={{ textAlign: 'center' }}>
                 {searchTerm ? 'No quotations found matching your search.' : 'No quotations saved.'}
               </td></tr>
             ) : (
               displayQuotations.slice((page - 1) * pageSize, page * pageSize).map((q, i) => {
                 const globalIndex = (page - 1) * pageSize + i;
-                const uniqueId = `${q.serial}-${quotations.findIndex(item => item === q)}`;
-                const isCancelled = cancelledQuotations.has(uniqueId);
+                const uniqueId = `${q.serial}-${q.id}`;
+                const isCancelled = q.cancelled === 1;
+                const isUsed = q.usedForJobCard === 1;
                 return (
                   <tr 
                     key={uniqueId}
                     style={{
-                      backgroundColor: isCancelled ? '#f5f5f5' : 'transparent',
+                      backgroundColor: isCancelled ? '#2d2d2d' : isUsed ? '#e6f7ff' : 'transparent',
                       color: isCancelled ? '#999' : 'inherit',
-                      opacity: isCancelled ? 0.6 : 1
+                      opacity: isCancelled ? 0.7 : 1
                     }}
                   >
                     <td>{q.serial}</td>
@@ -233,13 +237,22 @@ function Dashboard({ quotations, onEdit }) {
                     <td>{getRate(q)}</td>
                     <td>{getDate(q)}</td>
                     <td>
+                      {isCancelled ? (
+                        <span style={{ color: '#ff6b6b', fontWeight: 'bold' }}>Cancelled</span>
+                      ) : isUsed ? (
+                        <span style={{ color: '#00529B', fontWeight: 'bold' }}>Used</span>
+                      ) : (
+                        <span style={{ color: '#28a745', fontWeight: 'bold' }}>Available</span>
+                      )}
+                    </td>
+                    <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        {!isCancelled && (
+                        {!isCancelled && !isUsed && (
                           <>
                             <button className="save-btn-modern" onClick={() => onEdit(q)}>Edit</button>
                             <button 
                               className="save-btn-modern" 
-                              onClick={() => handleCancel(uniqueId)}
+                              onClick={() => handleCancel(q.id)}
                               style={{ backgroundColor: '#ff6b6b', borderColor: '#ff6b6b' }}
                             >
                               Cancel
@@ -248,6 +261,9 @@ function Dashboard({ quotations, onEdit }) {
                         )}
                         {isCancelled && (
                           <span style={{ color: '#999', fontStyle: 'italic' }}>Cancelled</span>
+                        )}
+                        {isUsed && !isCancelled && (
+                          <button className="save-btn-modern" onClick={() => onEdit(q)}>View</button>
                         )}
                       </div>
                     </td>
@@ -261,15 +277,40 @@ function Dashboard({ quotations, onEdit }) {
       {displayQuotations.length > pageSize && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, gap: 8 }}>
           <button className="save-btn-modern" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button>
-          {Array.from({ length: Math.ceil(displayQuotations.length / pageSize) }, (_, idx) => (
-            <button
-              key={idx + 1}
-              className={`save-btn-modern${page === idx + 1 ? ' active' : ''}`}
-              onClick={() => setPage(idx + 1)}
-            >
-              {idx + 1}
-            </button>
-          ))}
+          {(() => {
+            const totalPages = Math.ceil(displayQuotations.length / pageSize);
+            if (totalPages <= 1) return null;
+
+            const maxPages = 10;
+            const pageNumbers = [];
+            
+            if (totalPages <= maxPages) {
+              for (let i = 1; i <= totalPages; i++) {
+                pageNumbers.push(i);
+              }
+            } else {
+              let startPage = Math.max(1, page - Math.floor(maxPages / 2));
+              let endPage = Math.min(totalPages, startPage + maxPages - 1);
+
+              if (endPage - startPage + 1 < maxPages) {
+                startPage = Math.max(1, endPage - maxPages + 1);
+              }
+              
+              for (let i = startPage; i <= endPage; i++) {
+                pageNumbers.push(i);
+              }
+            }
+
+            return pageNumbers.map(p => (
+              <button
+                key={p}
+                className={`save-btn-modern${page === p ? ' active' : ''}`}
+                onClick={() => setPage(p)}
+              >
+                {p}
+              </button>
+            ));
+          })()}
           <button className="save-btn-modern" disabled={page === Math.ceil(displayQuotations.length / pageSize)} onClick={() => setPage(page + 1)}>Next</button>
         </div>
       )}

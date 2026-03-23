@@ -10,8 +10,10 @@ import Calendar from './components/Calendar';
 import Calculator from './components/Calculator';
 import CustomerMaster from './components/CustomerMaster';
 import PaperTypeMaster from './components/PaperTypeMaster';
+import LaminationMaster from './components/LaminationMaster';
 import JobCard from './components/JobCard';
 import UnsavedChangesPopup from './components/UnsavedChangesPopup';
+import CustomCalculator from './components/CustomCalculator';
 
 const products = [
   { name: 'CutToSheet', component: CutToSheet, section: 'products' },
@@ -20,11 +22,13 @@ const products = [
   { name: 'Envelope', component: Envelope, section: 'products' },
   { name: 'Bag', component: Bag, section: 'products' },
   { name: 'Calendar', component: Calendar, section: 'products' },
+  { name: 'Custom Calculator', component: CustomCalculator, section: 'products' },
 ];
 
 const masterItems = [
   { name: 'Customer Master', component: CustomerMaster, section: 'master' },
   { name: 'Paper Type Master', component: PaperTypeMaster, section: 'master' },
+  { name: 'Lamination Master', component: LaminationMaster, section: 'master' },
 ];
 
 const crmItems = [
@@ -32,6 +36,35 @@ const crmItems = [
 ];
 
 const allItems = [...products, ...masterItems, ...crmItems];
+
+const getStandardSize = (width, height) => {
+    const sizes = {
+        "8.5x11": "Letter",
+        "8.5x14": "Legal",
+        "11x17": "Tabloid",
+        "5.5x8.5": "Half-Letter",
+        "5.8x8.3": "A5",
+        "8.3x11.7": "A4",
+        "11.7x16.5": "A3",
+        "7.1x9.5": "7.1x9.5",
+        "7.1x4.75": "7.1x4.75",
+        "9.5x13.5": "9.5x13.5",
+        "11x11": "11x11",
+        "12x12": "12x12",
+        "9x9": "9x9",
+    };
+
+    const jobSize = `${width}x${height}`;
+    const jobSizeReversed = `${height}x${width}`;
+
+    if (sizes[jobSize]) {
+        return sizes[jobSize];
+    } else if (sizes[jobSizeReversed]) {
+        return sizes[jobSizeReversed];
+    } else {
+        return "Custom";
+    }
+};
 
 function App() {
   const [showDashboard, setShowDashboard] = useState(true);
@@ -41,6 +74,7 @@ function App() {
   const [isCalculatorVisible, setCalculatorVisible] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [paperTypes, setPaperTypes] = useState([]);
+  const [laminationTypes, setLaminationTypes] = useState([]);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [masterDropdownOpen, setMasterDropdownOpen] = useState(false);
@@ -58,14 +92,12 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const apiUrl = `http://${window.location.hostname}:3002`;
+  
 
   const fetchCustomers = useCallback(() => {
-    console.log('Fetching customers from:', `${apiUrl}/api/customers`);
-    fetch(`${apiUrl}/api/customers`)
+    fetch('/api/customers')
       .then(res => res.json())
       .then(data => {
-        console.log('Customers fetched:', data);
         if (data && data.data) {
           setCustomers(data.data);
         }
@@ -73,14 +105,12 @@ function App() {
       .catch(error => {
         console.error('Error fetching customers:', error);
       });
-  }, [apiUrl]);
+  }, []);
 
   const fetchPaperTypes = useCallback(() => {
-    console.log('Fetching paper types from:', `${apiUrl}/api/papertypes`);
-    fetch(`${apiUrl}/api/papertypes`)
+    fetch('/api/papertypes')
       .then(res => res.json())
       .then(data => {
-        console.log('Paper types fetched:', data);
         if (data && data.data) {
           setPaperTypes(data.data);
         }
@@ -89,16 +119,38 @@ function App() {
         console.error('Error fetching paper types:', error);
         setPaperTypes([]);
       });
-  }, [apiUrl]);
+  }, []);
+
+  const fetchLaminationTypes = useCallback(() => {
+    console.log('fetchLaminationTypes called');
+    fetch('/api/laminations')
+      .then(res => {
+        console.log('fetchLaminationTypes response status:', res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log('fetchLaminationTypes response data:', data);
+        if (data && data.data) {
+          console.log('Setting lamination types:', data.data);
+          setLaminationTypes(data.data);
+        } else {
+          console.log('No data.data found in response');
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching lamination types:', error);
+        setLaminationTypes([]);
+      });
+  }, []);
 
   useEffect(() => {
     fetchCustomers();
     fetchPaperTypes();
-  }, [fetchCustomers, fetchPaperTypes]);
+    fetchLaminationTypes();
+  }, [fetchCustomers, fetchPaperTypes, fetchLaminationTypes]);
 
   const handleAddCustomer = (customer) => {
-    console.log('Adding customer:', customer);
-    fetch(`${apiUrl}/api/customers`, {
+    fetch('/api/customers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(customer),
@@ -108,7 +160,6 @@ function App() {
       return response.json();
     })
     .then(data => {
-      console.log('Customer added successfully:', data);
       fetchCustomers();
     })
     .catch(error => {
@@ -117,8 +168,7 @@ function App() {
   };
 
   const handleUpdateCustomer = (customerId, customer) => {
-    console.log('Updating customer:', customerId, customer);
-    fetch(`${apiUrl}/api/customers/${customerId}`, {
+    fetch(`/api/customers/${customerId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(customer),
@@ -128,7 +178,6 @@ function App() {
       return response.json();
     })
     .then(data => {
-      console.log('Customer updated successfully:', data);
       fetchCustomers();
     })
     .catch(error => {
@@ -137,8 +186,7 @@ function App() {
   };
 
   const handleDeleteCustomer = (customerId) => {
-    console.log('Deleting customer:', customerId);
-    fetch(`${apiUrl}/api/customers/${customerId}`, {
+    fetch(`/api/customers/${customerId}`, {
       method: 'DELETE',
     })
     .then(response => {
@@ -146,7 +194,6 @@ function App() {
       return response.json();
     })
     .then(data => {
-      console.log('Customer deleted successfully:', data);
       fetchCustomers();
     })
     .catch(error => {
@@ -155,9 +202,8 @@ function App() {
   };
 
   const handleAddPaperType = async (paperType) => {
-    console.log('Adding paper type:', paperType);
     try {
-      const response = await fetch(`${apiUrl}/api/papertypes`, {
+      const response = await fetch('/api/papertypes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(paperType)
@@ -169,7 +215,6 @@ function App() {
         throw new Error(data.error || 'Failed to add paper type');
       }
       
-      console.log('Paper type added successfully:', data);
       fetchPaperTypes();
     } catch (error) {
       console.error('Error adding paper type:', error);
@@ -178,9 +223,8 @@ function App() {
   };
 
   const handleUpdatePaperType = async (paperTypeId, paperType) => {
-    console.log('Updating paper type:', paperTypeId, paperType);
     try {
-      const response = await fetch(`${apiUrl}/api/papertypes/${paperTypeId}`, {
+      const response = await fetch(`/api/papertypes/${paperTypeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(paperType),
@@ -192,7 +236,6 @@ function App() {
         throw new Error(data.error || 'Failed to update paper type');
       }
       
-      console.log('Paper type updated successfully:', data);
       fetchPaperTypes();
     } catch (error) {
       console.error('Error updating paper type:', error);
@@ -201,9 +244,8 @@ function App() {
   };
 
   const handleDeletePaperType = async (paperTypeId) => {
-    console.log('Deleting paper type:', paperTypeId);
     try {
-      const response = await fetch(`${apiUrl}/api/papertypes/${paperTypeId}`, {
+      const response = await fetch(`/api/papertypes/${paperTypeId}`, {
         method: 'DELETE',
       });
       
@@ -213,10 +255,75 @@ function App() {
         throw new Error(data.error || 'Failed to delete paper type');
       }
       
-      console.log('Paper type deleted successfully:', data);
       fetchPaperTypes();
     } catch (error) {
       console.error('Error deleting paper type:', error);
+      throw error;
+    }
+  };
+
+  const handleAddLaminationType = async (laminationType) => {
+    console.log('handleAddLaminationType called with:', laminationType);
+    try {
+      console.log('Making API call to /api/laminations');
+      const response = await fetch('/api/laminations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(laminationType)
+      });
+      
+      console.log('API response status:', response.status);
+      const data = await response.json();
+      console.log('API response data:', data);
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add lamination type');
+      }
+      
+      console.log('Calling fetchLaminationTypes to refresh data');
+      fetchLaminationTypes();
+    } catch (error) {
+      console.error('Error adding lamination type:', error);
+      throw error;
+    }
+  };
+
+  const handleUpdateLaminationType = async (laminationTypeId, laminationType) => {
+    try {
+      const response = await fetch(`/api/laminations/${laminationTypeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(laminationType),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update lamination type');
+      }
+      
+      fetchLaminationTypes();
+    } catch (error) {
+      console.error('Error updating lamination type:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteLaminationType = async (laminationTypeId) => {
+    try {
+      const response = await fetch(`/api/laminations/${laminationTypeId}`, {
+        method: 'DELETE',
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete lamination type');
+      }
+      
+      fetchLaminationTypes();
+    } catch (error) {
+      console.error('Error deleting lamination type:', error);
       throw error;
     }
   };
@@ -226,7 +333,7 @@ function App() {
   };
 
   const loadQuotations = useCallback(() => {
-    fetch(`${apiUrl}/api/quotations`)
+    fetch('/api/quotations?includeUsed=true&includeCancelled=true')
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
@@ -245,7 +352,7 @@ function App() {
         console.error("Failed to load quotations:", error);
         setQuotations([]);
       });
-  }, [apiUrl]);
+  }, []);
 
   useEffect(() => {
     if (showDashboard) {
@@ -259,12 +366,43 @@ function App() {
     setShowDashboard(false);
   };
 
-  const handleFormSaved = () => {
+  const handleSaveQuotation = (savedQuotation) => {
+    // If the saved quotation has an ID, it's an update.
+    if (savedQuotation && savedQuotation.data && savedQuotation.data.id) {
+        const updatedQuotation = {
+            ...savedQuotation.data,
+            // The data from the backend is nested inside a 'data' property.
+            // We need to destructure it to get the actual quotation object.
+            id: savedQuotation.data.id,
+            productType: savedQuotation.data.productType,
+            customerName: savedQuotation.data.customerName,
+            inputs: savedQuotation.data.inputs,
+            results: savedQuotation.data.results,
+            createdAt: savedQuotation.data.createdAt,
+            serial: savedQuotation.data.serial
+        };
+
+        const index = quotations.findIndex(q => q.id === updatedQuotation.id);
+
+        if (index !== -1) {
+            // Replace the old quotation with the updated one.
+            const updatedQuotations = [...quotations];
+            updatedQuotations[index] = updatedQuotation;
+            setQuotations(updatedQuotations);
+        } else {
+            // If it's a new quotation, add it to the list.
+            setQuotations(prev => [updatedQuotation, ...prev]);
+        }
+    } else {
+        // Fallback to reloading all quotations if something is unexpected.
+        loadQuotations();
+    }
+
+    // Reset the state and navigate back to the dashboard.
     setEditData(null);
     setShowDashboard(true);
     setSelectedProduct(null);
-    loadQuotations();
-  };
+};
 
   const handleSidebarNav = (productName) => {
     // Check if current component has unsaved changes
@@ -325,46 +463,52 @@ function App() {
     const ProductComponent = allItems.find(p => p.name === selectedProduct)?.component;
 
     if (ProductComponent) {
-      let componentProps = {
-        formData: editData,
-        onSaved: handleFormSaved,
-        getNextSerial: getNextSerial,
-        customers: customers,
-        paperTypes: paperTypes,
-        onAddCustomer: handleAddCustomer,
-        onAddPaperType: handleAddPaperType,
-        onNavigate: handleNavigateTo,
-        apiUrl: apiUrl,
-      };
-      
-      // Special props for master components
-      if (selectedProduct === 'Customer Master') {
-        componentProps = {
+        let componentProps = {
+          formData: editData,
+          onSaved: handleSaveQuotation, // Use the new handler
+          getNextSerial: getNextSerial,
           customers: customers,
+          paperTypes: paperTypes,
           onAddCustomer: handleAddCustomer,
-          onUpdateCustomer: handleUpdateCustomer,
-          onDeleteCustomer: handleDeleteCustomer,
-        };
-      } else if (selectedProduct === 'Paper Type Master') {
-        componentProps = {
-          paperTypes: paperTypes,
           onAddPaperType: handleAddPaperType,
-          onUpdatePaperType: handleUpdatePaperType,
-          onDeletePaperType: handleDeletePaperType,
+          onNavigate: handleNavigateTo,
         };
-      } else if (selectedProduct === 'Job Card') {
-        componentProps = {
-          customers: customers,
-          quotations: quotations,
-          paperTypes: paperTypes,
-          apiUrl: apiUrl,
-          onSaved: handleFormSaved,
-        };
-      }
+        
+        // Special props for master components
+        if (selectedProduct === 'Customer Master') {
+          componentProps = {
+            customers: customers,
+            onAddCustomer: handleAddCustomer,
+            onUpdateCustomer: handleUpdateCustomer,
+            onDeleteCustomer: handleDeleteCustomer,
+          };
+        } else if (selectedProduct === 'Paper Type Master') {
+          componentProps = {
+            paperTypes: paperTypes,
+            onAddPaperType: handleAddPaperType,
+            onUpdatePaperType: handleUpdatePaperType,
+            onDeletePaperType: handleDeletePaperType,
+          };
+        } else if (selectedProduct === 'Lamination Master') {
+          componentProps = {
+            laminationTypes: laminationTypes,
+            onAddLaminationType: handleAddLaminationType,
+            onUpdateLaminationType: handleUpdateLaminationType,
+            onDeleteLaminationType: handleDeleteLaminationType,
+          };
+        } else if (selectedProduct === 'Job Card') {
+          componentProps = {
+            customers: customers,
+            quotations: quotations,
+            paperTypes: paperTypes,
+            onSaved: handleSaveQuotation, // Corrected this line
+          };
+        }
       
-      // Ensure all components get customers and paperTypes for dropdowns
+      // Ensure all components get customers, paperTypes, and laminationTypes for dropdowns
       componentProps.customers = customers;
       componentProps.paperTypes = paperTypes;
+      componentProps.laminationTypes = laminationTypes;
       
       // Add paper type handlers to all components that might need them
       if (!componentProps.onUpdatePaperType) {
@@ -372,8 +516,15 @@ function App() {
         componentProps.onDeletePaperType = handleDeletePaperType;
       }
       
+      // Add lamination type handlers to all components that might need them
+      if (!componentProps.onAddLaminationType) {
+        componentProps.onAddLaminationType = handleAddLaminationType;
+        componentProps.onUpdateLaminationType = handleUpdateLaminationType;
+        componentProps.onDeleteLaminationType = handleDeleteLaminationType;
+      }
+      
       // The ProductComponent is now rendered directly and is responsible for its own layout.
-      return <ProductComponent {...componentProps} />;
+      return <ProductComponent {...componentProps} getStandardSize={getStandardSize} />;
     }
     
     return null; // Don't render anything if no product is selected
@@ -441,6 +592,15 @@ function App() {
                 >
                   Paper Type
                 </button>
+                <button
+                  className={`master-dropdown-item ${selectedProduct === 'Lamination Master' && !showDashboard ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSidebarNav('Lamination Master');
+                  }}
+                >
+                  Lamination
+                </button>
 
               </div>
             </div>
@@ -473,6 +633,24 @@ function App() {
             }}
           >
             Dashboard
+          </button>
+
+          <button
+            className={`dashboard-btn ${selectedProduct === 'Job Card' && !showDashboard ? 'active' : ''}`}
+            onClick={() => {
+              // Check if current component has unsaved changes
+              if (window.currentComponentHasUnsavedChanges) {
+                setPendingNavigation(() => () => {
+                  handleSidebarNav('Job Card');
+                });
+                setShowUnsavedPopup(true);
+                return;
+              }
+              
+              handleSidebarNav('Job Card');
+            }}
+          >
+            Job Card Dashboard
           </button>
 
           <div className="header-actions">

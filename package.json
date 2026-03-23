@@ -4,7 +4,12 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "cd frontend && npm install && npm run build",
+    "dev": "concurrently \"npm start\" \"cd frontend && npm start\""
+  },
+  "devDependencies": {
+    "concurrently": "^7.0.0"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +20,7 @@
     "express": "^4.17.1",
     "frontend": "file:frontend",
     "jspdf-autotable": "^5.0.2",
+    "node-fetch": "^3.3.2",
     "sqlite3": "^5.0.2"
   }
 }

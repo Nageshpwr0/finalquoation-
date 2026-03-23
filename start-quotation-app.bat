@@ -1,0 +1,3 @@
+@echo off
+echo Starting frontend and backend...
+start "Quotation App" cmd /k "npm run dev"

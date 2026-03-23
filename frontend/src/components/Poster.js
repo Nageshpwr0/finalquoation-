@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import '../design-system.css';
 
 const Modal = ({ show, onClose, children }) => {
@@ -18,7 +18,7 @@ const capitalizeFirstLetter = (string) => {
     return string.charAt(0).toUpperCase() + string.slice(1);
 };
 
-const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
+const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], laminationTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
     const [inputs, setInputs] = useState({
         quantity: 1000,
         paperType: '78',
@@ -45,8 +45,18 @@ const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], 
     const [pendingNavigation, setPendingNavigation] = useState(null);
     const [adjustmentPercentage, setAdjustmentPercentage] = useState(0);
     const [adjustmentAmount, setAdjustmentAmount] = useState(0);
+    const [customerSearchTerm, setCustomerSearchTerm] = useState('');
     const sizeRef = useRef(null);
     const laminationRef = useRef(null);
+
+    const filteredCustomers = useMemo(() => {
+        if (!customerSearchTerm) {
+            return customers;
+        }
+        return customers.filter(customer =>
+            customer.customerName.toLowerCase().includes(customerSearchTerm.toLowerCase())
+        );
+    }, [customers, customerSearchTerm]);
 
     const posterDefaultGummingWidths = {
         'A4': 8.5, 'letter': 8.5, '12x17.1': 12, '11x17': 11,
@@ -269,12 +279,14 @@ const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], 
                 paperRate = totalSheetsNeededForPaper * bestFit.sheet.price;
                 paperCostBreakdown = `Used Hotmail sticker sheet: ${bestFit.sheet.w}x${bestFit.sheet.h}" at ₹${bestFit.sheet.price}/sheet, ${bestFit.fitPerSheet} posters per sheet. Total sheets (including wastage of ${bestFit.wastageSheets}): ${totalSheetsNeededForPaper}.`;
                 
-                let laminationRatePerSqInch = 0;
-                if (lamination === 'matt_lam') laminationRatePerSqInch = 0.45;
-                else if (lamination === 'gloss_lam') laminationRatePerSqInch = 0.42;
-                else if (lamination === 'varnish_os') laminationRatePerSqInch = 0.25;
+                // Find lamination rate from master data by ID
+                const selectedLamination = laminationTypes.find(lam => 
+                    lam.id.toString() === lamination.toString()
+                );
+                const laminationRate = selectedLamination ? selectedLamination.rate : 0;
                 
-                laminationCost = bestFit.sheet.w * bestFit.sheet.h * laminationRatePerSqInch * totalSheetsNeededForPaper / 100;
+                // Formula: best fit area * total sheets * lamination rate / 100
+                laminationCost = bestFit.sheet.w * bestFit.sheet.h * totalSheetsNeededForPaper * laminationRate / 100;
             }
         } else {
             const sheetsPerJob = qty / sizeUps;
@@ -288,12 +300,14 @@ const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], 
             paperRate = sizeBaseValue * (gsm / 3100) * (ratePerKg / 500) * totalSheetsNeededForPaper;
             paperCostBreakdown = `Paper rate per kg: ₹${ratePerKg}. Total sheets (including wastage of ${wastageSheets}): ${Math.ceil(totalSheetsNeededForPaper)}.`;
 
-            let laminationRatePerSqInch = 0;
-            if (lamination === 'matt_lam') laminationRatePerSqInch = 0.45;
-            else if (lamination === 'gloss_lam') laminationRatePerSqInch = 0.42;
-            else if (lamination === 'varnish_os') laminationRatePerSqInch = 0.25;
+            // Find lamination rate from master data by ID
+            const selectedLamination = laminationTypes.find(lam => 
+                lam.id.toString() === lamination.toString()
+            );
+            const laminationRate = selectedLamination ? selectedLamination.rate : 0;
 
-            laminationCost = sizeBaseValue * laminationRatePerSqInch * totalSheetsNeededForPaper / 100;
+            // Formula: size base value * total sheets * lamination rate / 100
+            laminationCost = sizeBaseValue * totalSheetsNeededForPaper * laminationRate / 100;
         }
         
         let baseCost = 1600, largeBaseCost = 2200;
@@ -319,7 +333,15 @@ const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], 
             gummingStripCost = Math.max(areaBasedCost, quantityBasedMinimum);
         }
 
-        const totalAmount = paperRate + printingCost + laminationCost + gummingStripCost;
+        let totalAmount = paperRate + printingCost + laminationCost + gummingStripCost;
+        
+        const selectedCustomer = customers.find(c => c.customerName === inputs.customerName);
+        const margin = selectedCustomer ? parseFloat(selectedCustomer.margin) : 0;
+
+        if (margin > 0) {
+            totalAmount *= (1 + margin / 100);
+        }
+
         let ratePerPiece = (qty > 0) ? totalAmount / qty : 0;
         
         let ratePerPieceText = ratePerPiece.toFixed(2);
@@ -449,21 +471,28 @@ const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], 
                 <form className="cut-to-sheet-form" onSubmit={e => e.preventDefault()}>
                     <div className="form-grid-modern">
                         <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-                            <div style={{ flexGrow: 1 }}>
-                                <label className="input-label" htmlFor="customerName">Customer Name</label>
-                                <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange} required>
-                                    <option value="">-- Select Customer --</option>
-                                    {customers.map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
-                                </select>
-                            </div>
-                            <button
-                                type="button"
-                                className="save-btn-modern"
-                                style={{ padding: '10px 15px', fontSize: '1.2rem' }}
-                                onClick={() => onNavigate('Customer Master')}
-                            >
-                                +
-                            </button>
+                          <div style={{ flexGrow: 1 }}>
+                            <label htmlFor="customerName" className="input-label">Customer Name</label>
+                            <input
+                                type="text"
+                                placeholder="Search Customer"
+                                className="input-box mb-2"
+                                value={customerSearchTerm}
+                                onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                            />
+                            <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange}>
+                              <option value="">-- Select Customer --</option>
+                              {filteredCustomers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
+                            </select>
+                          </div>
+                          <button
+                            type="button"
+                            className="save-btn-modern"
+                            style={{ padding: '10px 15px', fontSize: '1.2rem' }}
+                            onClick={() => onNavigate('Customer Master')}
+                          >
+                            +
+                          </button>
                         </div>
                         <div className="form-group">
                             <label className="input-label" htmlFor="quantity">Quantity (Qty)</label>
@@ -527,9 +556,11 @@ const Poster = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], 
                             <label className="input-label" htmlFor="lamination">Lamination Type</label>
                             <select id="lamination" name="lamination" ref={laminationRef} className="input-box" value={inputs.lamination} onChange={handleInputChange}>
                                 <option value="none">None</option>
-                                <option value="matt_lam">Matt Lam</option>
-                                <option value="gloss_lam">Gloss Lam</option>
-                                <option value="varnish_os">Varnish OS</option>
+                                {laminationTypes && laminationTypes.map(lamination => (
+                                    <option key={lamination.id} value={lamination.id}>
+                                        {lamination.laminationName}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                         <div className="abc-checkboxes-modern" style={{gridColumn: '1 / -1'}}>

@@ -29,29 +29,40 @@ if (!document.querySelector('#customer-master-styles')) {
 
 const CustomerMaster = ({ customers, onAddCustomer, onUpdateCustomer, onDeleteCustomer }) => {
     const [customerName, setCustomerName] = useState('');
+    const [margin, setMargin] = useState('');
     const [editingCustomer, setEditingCustomer] = useState(null);
     const [editName, setEditName] = useState('');
+    const [editMargin, setEditMargin] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredCustomers = customers.filter(customer =>
+        customer.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onAddCustomer({ customerName });
+        onAddCustomer({ customerName, margin });
         setCustomerName('');
+        setMargin('');
     };
 
     const handleEdit = (customer) => {
         setEditingCustomer(customer.id);
         setEditName(customer.customerName || customer.name);
+        setEditMargin(customer.margin || '');
     };
 
     const handleUpdate = (customerId) => {
-        onUpdateCustomer(customerId, { customerName: editName });
+        onUpdateCustomer(customerId, { customerName: editName, margin: editMargin });
         setEditingCustomer(null);
         setEditName('');
+        setEditMargin('');
     };
 
     const handleCancelEdit = () => {
         setEditingCustomer(null);
         setEditName('');
+        setEditMargin('');
     };
 
     const handleDelete = (customerId) => {
@@ -79,6 +90,19 @@ const CustomerMaster = ({ customers, onAddCustomer, onUpdateCustomer, onDeleteCu
                             required 
                         />
                     </div>
+                    <div className="form-group" style={{ marginBottom: '20px' }}>
+                        <label className="input-label" htmlFor="margin">Margin %</label>
+                        <input
+                            id="margin"
+                            name="margin"
+                            className="input-box"
+                            type="number"
+                            value={margin}
+                            onChange={(e) => setMargin(e.target.value)}
+                            placeholder="Enter Margin %"
+                            required
+                        />
+                    </div>
                     <div style={{ textAlign: 'center' }}>
                         <button type="submit" className="save-btn-modern">Add Customer</button>
                     </div>
@@ -88,16 +112,26 @@ const CustomerMaster = ({ customers, onAddCustomer, onUpdateCustomer, onDeleteCu
             {/* Customer Dashboard */}
             <div className="cuttosheet-box">
                 <h1 className="form-title-pink">Customer Dashboard</h1>
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                    <input
+                        type="text"
+                        className="input-box"
+                        placeholder="Search Customers..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table className="result-table-modern">
                         <thead>
                             <tr>
                                 <th>Customer Name</th>
+                                <th>Margin %</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {customers && customers.length > 0 ? customers.map(customer => (
+                            {filteredCustomers.length > 0 ? filteredCustomers.map(customer => (
                                 <tr key={customer.id}>
                                     <td>
                                         {editingCustomer === customer.id ? (
@@ -110,6 +144,19 @@ const CustomerMaster = ({ customers, onAddCustomer, onUpdateCustomer, onDeleteCu
                                             />
                                         ) : (
                                             customer.customerName || customer.name
+                                        )}
+                                    </td>
+                                    <td>
+                                        {editingCustomer === customer.id ? (
+                                            <input
+                                                type="number"
+                                                value={editMargin}
+                                                onChange={(e) => setEditMargin(e.target.value)}
+                                                className="input-box"
+                                                style={{ margin: 0, width: '100%' }}
+                                            />
+                                        ) : (
+                                            customer.margin
                                         )}
                                     </td>
                                     <td>
@@ -152,7 +199,7 @@ const CustomerMaster = ({ customers, onAddCustomer, onUpdateCustomer, onDeleteCu
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan="2" style={{ textAlign: 'center' }}>No customers found</td>
+                                    <td colSpan="3" style={{ textAlign: 'center' }}>No customers found</td>
                                 </tr>
                             )}
                         </tbody>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import '../design-system.css';
 
 const Modal = ({ show, onClose, children }) => {
@@ -18,7 +18,7 @@ const capitalizeFirstLetter = (string) => {
     return string.charAt(0).toUpperCase() + string.slice(1);
 };
 
-const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
+const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], laminationTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
     const [inputs, setInputs] = useState({
         width: '',
         height: '',
@@ -36,6 +36,16 @@ const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onA
     const [saveSuccess, setSaveSuccess] = useState('');
     const [adjustmentPercentage, setAdjustmentPercentage] = useState(0);
     const [adjustmentAmount, setAdjustmentAmount] = useState(0);
+    const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+
+    const filteredCustomers = useMemo(() => {
+        if (!customerSearchTerm) {
+            return customers;
+        }
+        return customers.filter(customer =>
+            customer.customerName.toLowerCase().includes(customerSearchTerm.toLowerCase())
+        );
+    }, [customers, customerSearchTerm]);
 
     useEffect(() => {
       if (formData) {
@@ -255,16 +265,14 @@ const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onA
             let laminationDetails = "";
             const totalSheetsForLamination = (parsedQuantity + wastageSheets) / maxPiecesPerSheetOverall;
             if (inputs.lamination) {
-                let laminationFactor = 0;
-                switch (inputs.lamination) {
-                    case 'matt': laminationFactor = 0.45; laminationDetails = "Matt Lamination"; break;
-                    case 'gloss': laminationFactor = 0.42; laminationDetails = "Gloss Lamination"; break;
-                    case 'varnish': laminationFactor = 0.25; laminationDetails = "Varnish"; break;
-                    case 'thermal': laminationFactor = 0.85; laminationDetails = "Thermal Lamination"; break;
-                    case 'velvet': laminationFactor = 3; laminationDetails = "Velvet Lamination"; break;
-                    default: laminationFactor = 0; laminationDetails = "None/Invalid";
+                const selectedLamination = laminationTypes.find(l => l.id === parseInt(inputs.lamination));
+                if (selectedLamination) {
+                    const laminationRate = selectedLamination.rate;
+                    laminationDetails = selectedLamination.laminationName;
+                    totalLaminationCost = fullSheetWidth * fullSheetHeight * totalSheetsForLamination * 2 * laminationRate / 100;
+                } else {
+                    laminationDetails = "None/Invalid";
                 }
-                totalLaminationCost = fullSheetWidth * fullSheetHeight * laminationFactor * totalSheetsForLamination * 2 / 100;
             } else {
                 laminationDetails = "None";
             }
@@ -272,7 +280,7 @@ const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onA
             let dieCost = 0;
             const paperArea = fullSheetWidth * fullSheetHeight;
             if (paperArea < 320) dieCost = 1500;
-            else if (paperArea <= 450) dieCost = 2000;
+            else if (paperArea <= 420) dieCost = 2000;
             else if (paperArea <= 550) dieCost = 2500;
             else dieCost = 3200;
 
@@ -310,7 +318,15 @@ const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onA
 
                 const punchingCost = Math.ceil(parsedQuantity * 2 / maxPiecesPerSheetOverall / 1000) * 400;
                 const makingCost = parsedQuantity * 5;
-                const totalAmt = totalPaperCost + totalPrintingCost + totalLaminationCost + dieCost + punchingCost + makingCost;
+                let totalAmt = totalPaperCost + totalPrintingCost + totalLaminationCost + dieCost + punchingCost + makingCost;
+                
+                const selectedCustomer = customers.find(c => c.customerName === inputs.customerName);
+                const margin = selectedCustomer ? parseFloat(selectedCustomer.margin) : 0;
+
+                if (margin > 0) {
+                    totalAmt *= (1 + margin / 100);
+                }
+
                 const finalRate = totalAmt / parsedQuantity;
 
                 let totalSheets;
@@ -435,21 +451,28 @@ const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onA
           <form className="cut-to-sheet-form" onSubmit={e => e.preventDefault()}>
             <div className="form-grid-modern">
                 <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
-                    <div style={{ flexGrow: 1 }}>
-                        <label className="input-label" htmlFor="customerName">Customer Name</label>
-                        <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange} required>
-                            <option value="">-- Select Customer --</option>
-                            {customers.map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
-                        </select>
-                    </div>
-                    <button
-                        type="button"
-                        className="save-btn-modern"
-                        style={{ padding: '10px 15px', fontSize: '1.2rem' }}
-                        onClick={() => onNavigate('Customer Master')}
-                    >
-                        +
-                    </button>
+                  <div style={{ flexGrow: 1 }}>
+                    <label htmlFor="customerName" className="input-label">Customer Name</label>
+                    <input
+                        type="text"
+                        placeholder="Search Customer"
+                        className="input-box mb-2"
+                        value={customerSearchTerm}
+                        onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    />
+                    <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange}>
+                      <option value="">-- Select Customer --</option>
+                      {filteredCustomers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    className="save-btn-modern"
+                    style={{ padding: '10px 15px', fontSize: '1.2rem' }}
+                    onClick={() => onNavigate('Customer Master')}
+                  >
+                    +
+                  </button>
                 </div>
               <div className="form-group">
                 <label className="input-label" htmlFor="paperType">Paper Type</label>
@@ -500,11 +523,11 @@ const Bag = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onA
                 <label className="input-label" htmlFor="lamination">Lamination</label>
                 <select id="lamination" name="lamination" className="input-box" value={inputs.lamination} onChange={handleInputChange}>
                     <option value="">Select Lamination</option>
-                    <option value="matt">Matt Lamination</option>
-                    <option value="gloss">Gloss Lamination</option>
-                    <option value="varnish">Varnish</option>
-                    <option value="velvet">Velvet Lamination</option>
-                    <option value="thermal">Thermal Lamination</option>
+                    {laminationTypes && laminationTypes.map(lamination => (
+                        <option key={lamination.id} value={lamination.id}>
+                            {lamination.laminationName}
+                        </option>
+                    ))}
                 </select>
               </div>
               <div className="form-group">

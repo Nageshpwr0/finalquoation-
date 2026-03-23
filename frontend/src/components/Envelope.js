@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import '../design-system.css';
 
 const Modal = ({ show, onClose, children }) => {
@@ -18,7 +18,7 @@ const capitalizeFirstLetter = (string) => {
     return string.charAt(0).toUpperCase() + string.slice(1);
 };
 
-const Envelope = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
+const Envelope = ({ formData, onSaved, getNextSerial, customers, paperTypes = [], laminationTypes = [], onAddNewCustomer, apiUrl, onNavigate }) => {
   const [inputs, setInputs] = useState({
     quantity: '',
     standardSize: '',
@@ -43,6 +43,16 @@ const Envelope = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
   const [saveSuccess, setSaveSuccess] = useState('');
   const [adjustmentPercentage, setAdjustmentPercentage] = useState(0);
   const [adjustmentAmount, setAdjustmentAmount] = useState(0);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearchTerm) {
+        return customers;
+    }
+    return customers.filter(customer =>
+        customer.customerName.toLowerCase().includes(customerSearchTerm.toLowerCase())
+    );
+  }, [customers, customerSearchTerm]);
 
   useEffect(() => {
     if (formData) {
@@ -213,15 +223,25 @@ const Envelope = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
 
     let laminationCost = 0;
     if (laminationType !== "none") {
-      let laminationRate = 0;
-      if (laminationType === "matt") laminationRate = 0.45;
-      else if (laminationType === "gloss") laminationRate = 0.42;
-      else if (laminationType === "velvet") laminationRate = 3;
-      else if (laminationType === "thermal") laminationRate = 0.86;
+      // Find lamination rate from master data by ID
+      const selectedLamination = laminationTypes.find(lam => 
+        lam.id.toString() === laminationType.toString()
+      );
+      const laminationRate = selectedLamination ? selectedLamination.rate : 0;
+      
+      // Formula: total sheets * best fit area * lamination rate / 100
       laminationCost = totalSheets * bestFit.sheetArea * laminationRate / 100;
     }
 
-    const totalCost = paperCost + printingCost + makingCost + dieCost + gummingCost + windowCost + laminationCost;
+    let totalCost = paperCost + printingCost + makingCost + dieCost + gummingCost + windowCost + laminationCost;
+    
+    const selectedCustomer = customers.find(c => c.customerName === inputs.customerName);
+    const margin = selectedCustomer ? parseFloat(selectedCustomer.margin) : 0;
+
+    if (margin > 0) {
+        totalCost *= (1 + margin / 100);
+    }
+
     const finalRate = totalCost / numQty;
 
     setEnvelopeResult(prevResult => [...prevResult, {
@@ -330,10 +350,17 @@ const Envelope = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
           <div className="form-grid-modern">
             <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
               <div style={{ flexGrow: 1 }}>
-                <label className="input-label" htmlFor="customerName">Customer Name</label>
-                <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange} required>
+                <label htmlFor="customerName" className="input-label">Customer Name</label>
+                <input
+                    type="text"
+                    placeholder="Search Customer"
+                    className="input-box mb-2"
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                />
+                <select id="customerName" name="customerName" className="input-box" value={inputs.customerName} onChange={handleInputChange}>
                   <option value="">-- Select Customer --</option>
-                  {customers.map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
+                  {filteredCustomers.sort((a, b) => (a.customerName || '').localeCompare(b.customerName || '')).map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
                 </select>
               </div>
               <button
@@ -430,10 +457,11 @@ const Envelope = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
               <label className="input-label" htmlFor="laminationType">Lamination</label>
               <select id="laminationType" name="laminationType" className="input-box" value={inputs.laminationType} onChange={handleInputChange}>
                 <option value="none">None</option>
-                <option value="matt">Matt Oneside</option>
-                <option value="gloss">Gloss Oneside</option>
-                <option value="velvet">Velvet Oneside</option>
-                <option value="thermal">Thermal Oneside</option>
+                {laminationTypes && laminationTypes.map(lamination => (
+                  <option key={lamination.id} value={lamination.id}>
+                    {lamination.laminationName}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="form-group form-checkbox-group flex-center">
@@ -486,7 +514,9 @@ const Envelope = ({ formData, onSaved, getNextSerial, customers, paperTypes = []
                         {inputs.laminationType !== 'none' && (
                             <tr>
                                 <td>Lamination</td>
-                                {envelopeResult.map((r, i) => <td key={i}>{capitalizeFirstLetter(inputs.laminationType)} Oneside</td>)}
+                                {envelopeResult.map((r, i) => <td key={i}>{capitalizeFirstLetter(
+                                    laminationTypes.find(lam => lam.id.toString() === inputs.laminationType.toString())?.laminationName || inputs.laminationType
+                                )} Oneside</td>)}
                             </tr>
                         )}
                         {(inputs.addGummingFlap || inputs.addWindow) && (
