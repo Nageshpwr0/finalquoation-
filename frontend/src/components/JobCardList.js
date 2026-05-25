@@ -274,7 +274,9 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
       border-color: #6ee7b7;
       color: #047857;
     }
-    .job-card-list-status-badge--billing {
+    #root .crm-app.crm-bloom .job-card-list-status-badge--billing,
+    #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr td .job-card-list-status-badge--billing,
+    #root .job-card-list-status-badge--billing {
       background: #1e40af !important;
       border-color: #1d4ed8 !important;
       color: #ffffff !important;
@@ -305,7 +307,9 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
       border-color: #34d399;
       color: #a7f3d0;
     }
-    html[data-theme='dark'] .job-card-list-status-badge--billing {
+    html[data-theme='dark'] #root .crm-app.crm-bloom .job-card-list-status-badge--billing,
+    html[data-theme='dark'] #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr td .job-card-list-status-badge--billing,
+    html[data-theme='dark'] #root .job-card-list-status-badge--billing {
       background: #1e40af !important;
       border-color: #1d4ed8 !important;
       color: #ffffff !important;
