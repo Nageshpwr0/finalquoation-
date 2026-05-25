@@ -53,7 +53,8 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
     html:not([data-theme='dark']) #root tbody tr.jc-row-pending td {
       background: #FFF0F5 !important;
       background-color: #FFF0F5 !important;
-      border-bottom-color: rgba(148, 163, 184, 0.22) !important;
+      border: 1px solid #FFCCD5 !important;
+      border: 1px solid rgba(219, 112, 147, 0.45) !important;
     }
     .job-card-list-scroll { width: 100%; max-width: 100%; overflow: visible; }
     .job-card-list-table-wrap {
@@ -763,7 +764,8 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
     html:not([data-theme='dark']) #root tbody tr.jc-row-pending td {
       background: #FFF0F5 !important;
       background-color: #FFF0F5 !important;
-      border-bottom-color: rgba(148, 163, 184, 0.22) !important;
+      border: 1px solid #FFCCD5 !important;
+      border: 1px solid rgba(219, 112, 147, 0.45) !important;
     }
     html[data-theme='dark'] .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-billing td,
     html[data-theme='dark'] .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-billing.job-card-list-data-row td {
