@@ -53,8 +53,6 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
     html:not([data-theme='dark']) #root tbody tr.jc-row-pending td {
       background: #FFF0F5 !important;
       background-color: #FFF0F5 !important;
-      border: 1px solid #FFCCD5 !important;
-      border: 1px solid rgba(219, 112, 147, 0.45) !important;
     }
     .job-card-list-scroll { width: 100%; max-width: 100%; overflow: visible; }
     .job-card-list-table-wrap {
@@ -764,8 +762,6 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
     html:not([data-theme='dark']) #root tbody tr.jc-row-pending td {
       background: #FFF0F5 !important;
       background-color: #FFF0F5 !important;
-      border: 1px solid #FFCCD5 !important;
-      border: 1px solid rgba(219, 112, 147, 0.45) !important;
     }
     html[data-theme='dark'] .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-billing td,
     html[data-theme='dark'] .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-billing.job-card-list-data-row td {
@@ -952,6 +948,30 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
     html[data-theme='dark'] html body .crm-app.crm-bloom .job-card-list-table thead th * {
       color: #ffffff !important;
       -webkit-text-fill-color: #ffffff !important;
+    }
+
+    /* Uniform white outline grid (both horizontal and vertical borders) for all rows and columns in light theme */
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr td,
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table thead tr th,
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .job-card-list-table tbody tr td,
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .job-card-list-table thead tr th,
+    html:not([data-theme='dark']) #root .job-card-list-table tbody tr td,
+    html:not([data-theme='dark']) #root .job-card-list-table thead tr th,
+    html:not([data-theme='dark']) #root tbody tr td,
+    html:not([data-theme='dark']) #root thead tr th {
+      border: 1px solid #ffffff !important;
+    }
+    
+    /* Uniform subtle outline grid for all rows and columns in dark theme */
+    html[data-theme='dark'] #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr td,
+    html[data-theme='dark'] #root .crm-app.crm-bloom .result-table-modern.job-card-list-table thead tr th,
+    html[data-theme='dark'] #root .crm-app.crm-bloom .job-card-list-table tbody tr td,
+    html[data-theme='dark'] #root .crm-app.crm-bloom .job-card-list-table thead tr th,
+    html[data-theme='dark'] #root .job-card-list-table tbody tr td,
+    html[data-theme='dark'] #root .job-card-list-table thead tr th,
+    html[data-theme='dark'] #root tbody tr td,
+    html[data-theme='dark'] #root thead tr th {
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
     }
   `;
 
