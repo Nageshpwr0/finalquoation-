@@ -46,10 +46,11 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
       text-transform: uppercase !important;
     }
     
-    html:not([data-theme='dark']) .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-pending td,
-    html:not([data-theme='dark']) .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-pending.job-card-list-data-row td,
-    html:not([data-theme='dark']) .crm-app.crm-bloom .job-card-list-table tbody tr.jc-row-pending td,
-    html:not([data-theme='dark']) .job-card-list-table tbody tr.jc-row-pending td {
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-pending td,
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-pending.job-card-list-data-row td,
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .job-card-list-table tbody tr.jc-row-pending td,
+    html:not([data-theme='dark']) #root .job-card-list-table tbody tr.jc-row-pending td,
+    html:not([data-theme='dark']) #root tbody tr.jc-row-pending td {
       background: #FFF0F5 !important;
       background-color: #FFF0F5 !important;
       border-bottom-color: rgba(148, 163, 184, 0.22) !important;
@@ -754,6 +755,15 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
       background-color: #d2eafd !important;
       color: #000000 !important;
       border-bottom-color: #79bff8 !important;
+    }
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-pending td,
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-pending.job-card-list-data-row td,
+    html:not([data-theme='dark']) #root .crm-app.crm-bloom .job-card-list-table tbody tr.jc-row-pending td,
+    html:not([data-theme='dark']) #root .job-card-list-table tbody tr.jc-row-pending td,
+    html:not([data-theme='dark']) #root tbody tr.jc-row-pending td {
+      background: #FFF0F5 !important;
+      background-color: #FFF0F5 !important;
+      border-bottom-color: rgba(148, 163, 184, 0.22) !important;
     }
     html[data-theme='dark'] .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-billing td,
     html[data-theme='dark'] .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr.jc-row-billing.job-card-list-data-row td {
