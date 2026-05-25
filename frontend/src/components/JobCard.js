@@ -3647,7 +3647,7 @@ function JobCard({
         dispatchDate: dispatchDateIso,
         priority: savePriority,
         createdBy: String(formData.createdBy || '').trim() || loginName,
-        imageData: uploadedImageData || formData.imageData || '',
+        imageData: formData.imageData || '',
         processDetails: processRows,
         taskManager: {
           ...taskManager,
