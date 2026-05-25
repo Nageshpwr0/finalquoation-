@@ -275,9 +275,10 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
       color: #047857;
     }
     .job-card-list-status-badge--billing {
-      background: #d2eafd;
-      border-color: #79bff8;
-      color: #000000;
+      background: #1e40af !important;
+      border-color: #1d4ed8 !important;
+      color: #ffffff !important;
+      -webkit-text-fill-color: #ffffff !important;
     }
     .job-card-list-status-badge--completed {
       background: #4caf50;
@@ -305,10 +306,10 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
       color: #a7f3d0;
     }
     html[data-theme='dark'] .job-card-list-status-badge--billing {
-      background: #d2eafd;
-      border-color: #79bff8;
-      color: #000000 !important;
-      -webkit-text-fill-color: #000000 !important;
+      background: #1e40af !important;
+      border-color: #1d4ed8 !important;
+      color: #ffffff !important;
+      -webkit-text-fill-color: #ffffff !important;
     }
     html[data-theme='dark'] .job-card-list-status-badge--completed {
       background: #4caf50;
@@ -950,7 +951,7 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
       -webkit-text-fill-color: #ffffff !important;
     }
 
-    /* Uniform white outline grid (both horizontal and vertical borders) for all rows and columns in light theme */
+    /* Uniform thin black outline grid (low opacity, very faint) for all rows and columns in light theme */
     html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table tbody tr td,
     html:not([data-theme='dark']) #root .crm-app.crm-bloom .result-table-modern.job-card-list-table thead tr th,
     html:not([data-theme='dark']) #root .crm-app.crm-bloom .job-card-list-table tbody tr td,
@@ -959,7 +960,7 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
     html:not([data-theme='dark']) #root .job-card-list-table thead tr th,
     html:not([data-theme='dark']) #root tbody tr td,
     html:not([data-theme='dark']) #root thead tr th {
-      border: 1px solid #ffffff !important;
+      border: 1px solid rgba(0, 0, 0, 0.08) !important;
     }
     
     /* Uniform subtle outline grid for all rows and columns in dark theme */
@@ -971,7 +972,7 @@ const JOB_CARD_LIST_TABLE_INLINE_CSS = `
     html[data-theme='dark'] #root .job-card-list-table thead tr th,
     html[data-theme='dark'] #root tbody tr td,
     html[data-theme='dark'] #root thead tr th {
-      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      border: 1px solid rgba(255, 255, 255, 0.06) !important;
     }
   `;
 
