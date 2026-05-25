@@ -1070,8 +1070,14 @@ function JobCard({
   });
   const defaultLaminationOptions = ['Matt Lamination B/S', 'Matt Lamination O/S', 'Gloss Lamination B/S', 'Gloss Lamination O/S', 'Velvet Lamination B/S', 'Velvet Lamination O/S', 'Thermal Lamination B/S', 'Thermal Lamination O/S', 'Aqua Varsnish B/S', 'Aqua Varsnish O/S'];
   const laminationOptionValues = Array.from(new Set([...defaultLaminationOptions, ...(laminationTypes || []).map(lam => ((lam === null || lam === void 0 ? void 0 : lam.laminationName) || '').trim()).filter(Boolean)]));
-  const bindingProductOptions = Array.from(new Set((bindingMasterCustomData.bindingProductRows || []).map(row => ((row === null || row === void 0 ? void 0 : row.productName) || '').trim()).filter(Boolean)));
-  const bindingProductProcessMap = (bindingMasterCustomData.bindingProductRows || []).reduce((acc, row) => {
+  const allBindingProductRows = [
+    ...(bindingMasterCustomData.bindingProductRows || []),
+    ...(bindingMasterCustomData.padBindingProductRows || []),
+    ...(bindingMasterCustomData.visualateBindingProductRows || []),
+    ...(bindingMasterCustomData.hardboundGallyBindingProductRows || []),
+  ];
+  const bindingProductOptions = Array.from(new Set(allBindingProductRows.map(row => ((row === null || row === void 0 ? void 0 : row.productName) || '').trim()).filter(Boolean)));
+  const bindingProductProcessMap = allBindingProductRows.reduce((acc, row) => {
     const productName = ((row === null || row === void 0 ? void 0 : row.productName) || '').trim();
     if (!productName) return acc;
     acc[productName] = Array.isArray(row.selectedProcesses) ? row.selectedProcesses : [];
